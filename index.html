@@ -411,7 +411,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const TELEGRAM_BOT_TOKEN = "8635739693:AAG7X98AJL8T-TvH2SKkPd62PfXbk3Mtg-M";
+    const TELEGRAM_BOT_TOKEN = "8635739693:AAFYGCIgGW7WTwvMIhh5Yvy_wXttPR2kC28";
     const TELEGRAM_CHAT_ID = "-1003670319520";
 
     function telegramMesajGonder(mesaj) {
@@ -1107,18 +1107,6 @@
         await updateTimeOptions();
         await listele();
 
-        const mesaj =
-          "Merhaba, randevum oluşturuldu.%0A%0A" +
-          "👤 İsim: " + name + "%0A" +
-          "📞 Telefon: " + phone + "%0A" +
-          "💇 Hizmet: " + service + "%0A" +
-          "📅 Tarih: " + date + "%0A" +
-          "🕒 Saat: " + time + "%0A%0A" +
-          "Teşekkürler.";
-
-        const whatsappUrl = "https://wa.me/905469066565?text=" + mesaj;
-        window.open(whatsappUrl, "_blank");
-
         alert("Randevu başarıyla oluşturuldu.");
       } catch (error) {
         alert("Kayıt hatası: " + error.message);
@@ -1238,4 +1226,3 @@
   </script>
 </body>
 </html>
-
