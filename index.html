@@ -643,6 +643,21 @@
       return now >= bitis || tarih < formatDateLocal(now);
     }
 
+    function secilenSaatGecmisMi(tarih, saat, now = new Date()) {
+      const randevuTarihi = parseAppointmentDateTime(tarih, saat);
+      if (!randevuTarihi) return false;
+      return randevuTarihi <= now;
+    }
+
+    function gecmisSaatleriGetir(tarih, now = new Date()) {
+      if (!tarih) return [];
+      if (tarih !== formatDateLocal(now)) return [];
+
+      return saatler.filter(function (saat) {
+        return secilenSaatGecmisMi(tarih, saat, now);
+      });
+    }
+
     function haftaSonuMu(tarih) {
       if (!tarih) return false;
       const parcalar = String(tarih).split("-").map(Number);
@@ -816,14 +831,17 @@
       cancelPhoneInput.value = telefonuDuzenle(cancelPhoneInput.value);
     });
 
-    function buildTimeOptions(occupiedTimes, closedTimes) {
+    function buildTimeOptions(occupiedTimes, closedTimes, pastTimes) {
       timeSelect.innerHTML = "";
 
       saatler.forEach(function (saat) {
         const option = document.createElement("option");
         option.value = saat;
 
-        if (closedTimes.includes(saat)) {
+        if (pastTimes.includes(saat)) {
+          option.textContent = saat + " - GEÇMİŞ";
+          option.disabled = true;
+        } else if (closedTimes.includes(saat)) {
           option.textContent = saat + " - KAPALI";
           option.disabled = true;
         } else if (occupiedTimes.includes(saat)) {
@@ -882,7 +900,7 @@
       const selectedDate = dateInput.value;
 
       if (!selectedDate) {
-        buildTimeOptions([], []);
+        buildTimeOptions([], [], []);
         selectedInfo.textContent = "Lütfen tarih seçin.";
         btnRandevu.disabled = false;
         return;
@@ -907,24 +925,37 @@
 
       const occupied = await getOccupiedTimesForDate(selectedDate);
       const closedTimes = await kapaliSaatleriGetir(selectedDate);
+      const pastTimes = gecmisSaatleriGetir(selectedDate);
 
-      buildTimeOptions(occupied, closedTimes);
+      buildTimeOptions(occupied, closedTimes, pastTimes);
+
+      const kullanilamayanSaatler = new Set([
+        ...occupied,
+        ...closedTimes,
+        ...pastTimes
+      ]);
 
       const doluSayisi = occupied.length;
       const kapaliSayisi = closedTimes.length;
+      const gecmisSayisi = pastTimes.length;
       const toplam = saatler.length;
-      const musait = toplam - doluSayisi - kapaliSayisi;
+      const musait = toplam - kullanilamayanSaatler.size;
 
       btnRandevu.disabled = musait <= 0;
 
       if (musait <= 0) {
-        if (kapaliSayisi > 0) {
-          selectedInfo.textContent = selectedDate + " için müsait saat kalmadı. " + doluSayisi + " dolu, " + kapaliSayisi + " kapalı saat var.";
-        } else {
-          selectedInfo.textContent = selectedDate + " için boş saat kalmadı.";
-        }
+        selectedInfo.textContent =
+          selectedDate + " için müsait saat kalmadı. " +
+          doluSayisi + " dolu, " +
+          kapaliSayisi + " kapalı, " +
+          gecmisSayisi + " geçmiş saat var.";
       } else {
-        selectedInfo.textContent = selectedDate + " için " + musait + " müsait, " + doluSayisi + " dolu, " + kapaliSayisi + " kapalı saat var.";
+        selectedInfo.textContent =
+          selectedDate + " için " +
+          musait + " müsait, " +
+          doluSayisi + " dolu, " +
+          kapaliSayisi + " kapalı, " +
+          gecmisSayisi + " geçmiş saat var.";
       }
     }
 
@@ -1079,6 +1110,13 @@
           } else {
             alert("Seçtiğiniz gün randevuya kapalı.");
           }
+          await updateTimeOptions();
+          await listele();
+          return;
+        }
+
+        if (secilenSaatGecmisMi(date, time)) {
+          alert("Seçtiğiniz saat geçtiği için bu saate randevu alınamaz.");
           await updateTimeOptions();
           await listele();
           return;
