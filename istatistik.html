@@ -1,0 +1,50 @@
+function istatistikGoster() {
+  const res = UrlFetchApp.fetch(BASE + "/randevu_gecmisi");
+  const data = JSON.parse(res.getContentText());
+
+  if (!data.documents) {
+    telegramGonder("📊 İstatistik bulunamadı.");
+    return;
+  }
+
+  const now = new Date();
+  const todayStr = Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd");
+
+  const currentMonth = Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM");
+  
+  const weekAgo = new Date();
+  weekAgo.setDate(now.getDate() - 7);
+
+  let gunluk = 0;
+  let haftalik = 0;
+  let aylik = 0;
+
+  data.documents.forEach(doc => {
+    const f = doc.fields;
+    const date = f.date.stringValue;
+
+    // Günlük
+    if (date === todayStr) {
+      gunluk++;
+    }
+
+    // Haftalık
+    const d = new Date(date);
+    if (d >= weekAgo && d <= now) {
+      haftalik++;
+    }
+
+    // Aylık
+    if (date.startsWith(currentMonth)) {
+      aylik++;
+    }
+  });
+
+  const mesaj =
+    "📊 RANDEVU İSTATİSTİKLERİ\n\n" +
+    "🗓 Bugün: " + gunluk + " kişi\n" +
+    "📅 Son 7 gün: " + haftalik + " kişi\n" +
+    "🗓 Bu ay: " + aylik + " kişi";
+
+  telegramGonder(mesaj);
+}
