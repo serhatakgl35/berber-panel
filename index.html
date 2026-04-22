@@ -1162,7 +1162,7 @@
         const kontrol = await kontrol9GunTel(phone, date);
 
         if (kontrol.engelVar) {
-          alert("Bu telefon numarası ile önceki veya sonraki 9 gün içinde tekrar randevu alınamaz. En erken " + kontrol.enErkenTarih + " tarihinde randevu alabilirsiniz.");
+          alert("Sistemde eski randevu kaydınız bulunmuştur. 9 gün içinde tekrar randevu alınamaz. En erken " + kontrol.enErkenTarih + " tarihinde randevu alabilirsiniz.");
           return;
         }
 
