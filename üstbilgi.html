@@ -1,54 +1,296 @@
-html {
-  background: #ffffff;
-}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>İstatistik</title>
+
+<style>
+* { box-sizing: border-box; }
 
 body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-  background: #ffffff;
-  color: #111;
-  font-family: Arial, sans-serif;
-  touch-action: pan-y;
-  overscroll-behavior-x: none;
-  -webkit-overflow-scrolling: touch;
+  margin:0;
+  background:#ffffff;
+  font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", Arial;
+  color:#111;
 }
-  ">
-    <a href="index.html" style="
-      color:#fff;
-      text-decoration:none;
-      background:#222;
-      padding:10px 16px;
-      border-radius:10px;
-      font-weight:600;
-    ">Ana Sayfa</a>
 
-    <a href="liste.html" style="
-      color:#fff;
-      text-decoration:none;
-      background:#222;
-      padding:10px 16px;
-      border-radius:10px;
-      font-weight:600;
-    ">Randevu Listesi</a>
+.page {
+  max-width:1100px;
+  margin:auto;
+  padding:16px;
+}
 
-    <a href="takvim.html" style="
-      color:#fff;
-      text-decoration:none;
-      background:#222;
-      padding:10px 16px;
-      border-radius:10px;
-      font-weight:600;
-    ">Takvimli Liste</a>
+/* NAV */
+nav {
+  background:#000;
+  padding:14px;
+  display:flex;
+  justify-content:center;
+  gap:10px;
+}
 
-    <a href="istatistik.html" style="
-      color:#fff;
-      text-decoration:none;
-      background:#2d2d2d;
-      padding:10px 16px;
-      border-radius:10px;
-      font-weight:700;
-    ">İstatistik</a>
-  </nav>
+nav a {
+  color:#fff;
+  text-decoration:none;
+  background:#1c1c1e;
+  padding:10px 16px;
+  border-radius:12px;
+  font-weight:600;
+}
+
+/* CARD */
+.card {
+  background:#fff;
+  border-radius:20px;
+  padding:20px;
+  margin-top:16px;
+  box-shadow:0 10px 25px rgba(0,0,0,0.06);
+}
+
+/* TITLE */
+h1 {
+  margin:0;
+  font-size:26px;
+}
+
+.subtitle {
+  color:#777;
+  margin-top:6px;
+}
+
+/* BUTTON */
+button {
+  background:#000;
+  color:#fff;
+  border:none;
+  padding:10px 16px;
+  border-radius:12px;
+  font-weight:600;
+  cursor:pointer;
+}
+
+/* GRID */
+.grid {
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+  margin-top:16px;
+}
+
+.box {
+  background:#f7f7f7;
+  border-radius:16px;
+  padding:18px;
+  text-align:center;
+}
+
+.box h2 {
+  margin:0;
+  font-size:32px;
+}
+
+.box span {
+  color:#777;
+}
+
+/* SUMMARY */
+.summary {
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+  margin-top:14px;
+}
+
+.summary-box {
+  background:#f7f7f7;
+  border-radius:16px;
+  padding:16px;
+}
+
+.summary-title {
+  color:#777;
+}
+
+.summary-value {
+  font-size:20px;
+  font-weight:bold;
+}
+
+/* GRAPH */
+.chart {
+  display:flex;
+  align-items:flex-end;
+  gap:20px;
+  height:250px;
+  margin-top:20px;
+}
+
+.bar {
+  flex:1;
+  background:#007aff;
+  border-radius:10px 10px 6px 6px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  color:#fff;
+  font-size:13px;
+  padding-bottom:6px;
+}
+
+.label {
+  text-align:center;
+  margin-top:6px;
+  font-size:13px;
+}
+
+/* RESPONSIVE */
+@media(max-width:800px){
+  .grid { grid-template-columns:1fr 1fr; }
+  .summary { grid-template-columns:1fr; }
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+  <a href="index.html">Ana Sayfa</a>
+  <a href="liste.html">Randevu Listesi</a>
+  <a href="takvim.html">Takvimli Liste</a>
+  <a href="istatistik.html">İstatistik</a>
+</nav>
+
+<div class="page">
+
+<div class="card">
+  <h1>İstatistik</h1>
+  <div class="subtitle">Tıraş verileri</div>
+
+  <button onclick="yukle()">Yenile</button>
+
+  <div class="grid">
+    <div class="box">
+      <div>Bugün</div>
+      <h2 id="gunluk">0</h2>
+      <span>kişi</span>
+    </div>
+
+    <div class="box">
+      <div>7 Gün</div>
+      <h2 id="haftalik">0</h2>
+      <span>kişi</span>
+    </div>
+
+    <div class="box">
+      <div>Bu Ay</div>
+      <h2 id="aylik">0</h2>
+      <span>kişi</span>
+    </div>
+
+    <div class="box">
+      <div>Toplam</div>
+      <h2 id="toplam">0</h2>
+      <span>kişi</span>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="summary-box">
+      <div class="summary-title">En Yoğun Gün</div>
+      <div id="yogun" class="summary-value">-</div>
+    </div>
+
+    <div class="summary-box">
+      <div class="summary-title">Ortalama</div>
+      <div id="ortalama" class="summary-value">-</div>
+    </div>
+
+    <div class="summary-box">
+      <div class="summary-title">Aylık Fark</div>
+      <div id="fark" class="summary-value">-</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Son 6 Ay</h2>
+
+  <div id="chart" class="chart"></div>
+
+</div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "BURAYA",
+  authDomain: "BURAYA",
+  projectId: "berber-randevu-14f7f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+function format(d){
+  return d.toISOString().slice(0,10);
+}
+
+async function yukle(){
+
+  const snap = await getDocs(collection(db,"randevu_gecmisi"));
+
+  let gunluk=0,haftalik=0,aylik=0,toplam=0;
+  const map={};
+
+  const now=new Date();
+  const today=format(now);
+
+  snap.forEach(doc=>{
+    const d=doc.data();
+    const date=d.date;
+
+    if(!date) return;
+
+    toplam++;
+
+    if(date===today) gunluk++;
+
+    if(date.startsWith(today.slice(0,7))) aylik++;
+
+    const m=date.slice(0,7);
+    map[m]=(map[m]||0)+1;
+  });
+
+  document.getElementById("gunluk").textContent=gunluk;
+  document.getElementById("haftalik").textContent=haftalik;
+  document.getElementById("aylik").textContent=aylik;
+  document.getElementById("toplam").textContent=toplam;
+
+  // chart
+  const chart=document.getElementById("chart");
+  chart.innerHTML="";
+
+  const keys=Object.keys(map).slice(-6);
+  const max=Math.max(...keys.map(k=>map[k]));
+
+  keys.forEach(k=>{
+    const h=(map[k]/max)*200;
+
+    const div=document.createElement("div");
+    div.innerHTML=`
+      <div class="bar" style="height:${h}px">${map[k]}</div>
+      <div class="label">${k}</div>
+    `;
+    chart.appendChild(div);
+  });
+}
+
+yukle();
+</script>
+
+</body>
+</html>
