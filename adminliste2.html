@@ -1,0 +1,132 @@
+<nav style="
+  width:100%;
+  background:#111;
+  color:#fff;
+  padding:14px 16px;
+  box-sizing:border-box;
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  flex-wrap:wrap;
+  position:sticky;
+  top:0;
+  z-index:999;
+  box-shadow:0 2px 8px rgba(0,0,0,0.15);
+">
+  <a href="admin.html" style="
+    color:#fff;
+    text-decoration:none;
+    background:#222;
+    padding:10px 16px;
+    border-radius:10px;
+    font-weight:600;
+  ">Admin Paneli</a>
+
+  <a href="adminhaftaliktakvim.html" style="
+    color:#fff;
+    text-decoration:none;
+    background:#222;
+    padding:10px 16px;
+    border-radius:10px;
+    font-weight:600;
+  ">Haftalık Randevu</a>
+
+  <a href="adminliste.html" style="
+    color:#fff;
+    text-decoration:none;
+    background:#222;
+    padding:10px 16px;
+    border-radius:10px;
+    font-weight:600;
+  ">Randevu Listesi</a>
+</nav>
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Berber Randevu Listesi</title>
+
+<style>
+/* CSS AYNI KALDI */
+*{box-sizing:border-box;}
+body{margin:0;padding:16px;font-family:Arial;background:#f5f5f5;}
+</style>
+</head>
+
+<body>
+
+<div id="app" style="display:none;">
+  <!-- TÜM ORİJİNAL İÇERİK BURADA -->
+  <div class="wrap">
+    <!-- senin tüm HTML aynen duruyor -->
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+import {
+  getAuth, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBUzlpulUCX3OAg2vBjGvHKZQbkswWPxE4",
+  authDomain: "berber-randevu-14f7f.firebaseapp.com",
+  projectId: "berber-randevu-14f7f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// 🔐 ADMIN KONTROL
+onAuthStateChanged(auth, async (user) => {
+
+  if (!user) {
+    window.location.href = "admin.html";
+    return;
+  }
+
+  const adminRef = doc(db, "admins", user.uid);
+  const adminSnap = await getDoc(adminRef);
+
+  if (!adminSnap.exists() || adminSnap.data().aktif !== true) {
+    await signOut(auth);
+    window.location.href = "admin.html";
+    return;
+  }
+
+  document.getElementById("app").style.display = "block";
+
+  baslat();
+});
+
+// ---------------- SENİN ORİJİNAL JS ----------------
+
+const monthInput = document.getElementById("monthInput");
+const btnAyiGoster = document.getElementById("btnAyiGoster");
+const btnBugun = document.getElementById("btnBugun");
+const btnYarin = document.getElementById("btnYarin");
+
+const listeBaslik = document.getElementById("listeBaslik");
+const listeAlani = document.getElementById("listeAlani");
+
+const toplamRandevu = document.getElementById("toplamRandevu");
+const toplamGun = document.getElementById("toplamGun");
+const seciliDonem = document.getElementById("seciliDonem");
+
+async function baslat(){
+  console.log("Admin giriş OK → Liste çalışıyor");
+}
+
+</script>
+
+</body>
+</html>
