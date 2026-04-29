@@ -355,18 +355,7 @@
         font-size: 11px;
       }
     }
-  
-/* PRO PANEL SAFE */
-td.today {
-  outline: 2px solid #111;
-  background: #fffde7 !important;
-}
-td.musait { background:#e8f5e9; }
-td.dolu { background:#ffebee; }
-td.gecmis { background:#eeeeee; }
-td.kapali { background:#e0e0e0; }
-
-</style>
+  </style>
 </head>
 <body>
   <div class="page">
@@ -492,22 +481,13 @@ td.kapali { background:#e0e0e0; }
       return d;
     }
 
-    
-function haftaninBesGunu(baslangic) {
-  const gunler = [];
-  const bugun = new Date();
-  bugun.setHours(0,0,0,0);
-
-  for (let i = 0; i < 5; i++) {
-    const d = new Date(baslangic);
-    d.setDate(baslangic.getDate() + i);
-    d.setHours(0,0,0,0);
-    gunler.push(d);
-  }
-
-  return gunler.filter(g => g >= bugun);
-}
-
+    function haftaninBesGunu(baslangic) {
+      const gunler = [];
+      for (let i = 0; i < 5; i++) {
+        const d = new Date(baslangic);
+        d.setDate(baslangic.getDate() + i);
+        gunler.push(d);
+      }
       return gunler;
     }
 
@@ -589,6 +569,9 @@ function haftaninBesGunu(baslangic) {
       const simdi = new Date();
 
       gunler.forEach(function(gun) {
+  const bugun = new Date();
+  bugun.setHours(0,0,0,0);
+  if (gun < bugun) return;
         const tarih = tarihKeyYap(gun);
         gunKapaliMap[tarih] = otomatikKapaliGunMu(tarih);
         kapaliSaatMap[tarih] = [];
@@ -688,21 +671,15 @@ function haftaninBesGunu(baslangic) {
       };
     }
 
-    
-function isToday(dateStr) {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth()+1).padStart(2,"0");
-  const d = String(now.getDate()).padStart(2,"0");
-  return dateStr === `${y}-${m}-${d}`;
-}
-
-function tabloHTMLUret(gunler, randevuMap, gunKapaliMap, kapaliSaatMap) {
+    function tabloHTMLUret(gunler, randevuMap, gunKapaliMap, kapaliSaatMap) {
       let html = "<table>";
       html += "<thead><tr>";
       html += '<th class="saat-baslik">Saat</th>';
 
       gunler.forEach(function(gun, i) {
+  const bugun = new Date();
+  bugun.setHours(0,0,0,0);
+  if (gun < bugun) return;
         const tarih = tarihKeyYap(gun);
         const kapaliGun = !!gunKapaliMap[tarih];
 
@@ -724,6 +701,9 @@ function tabloHTMLUret(gunler, randevuMap, gunKapaliMap, kapaliSaatMap) {
         html += '<td class="saat-baslik">' + saat + "</td>";
 
         gunler.forEach(function(gun) {
+  const bugun = new Date();
+  bugun.setHours(0,0,0,0);
+  if (gun < bugun) return;
           const tarih = tarihKeyYap(gun);
           const key = tarih + "_" + saat;
 
@@ -734,34 +714,34 @@ function tabloHTMLUret(gunler, randevuMap, gunKapaliMap, kapaliSaatMap) {
           const slotGecmis = slotGecmisMi(tarih, saat, simdi);
 
           if (kapaliGun) {
-            html += `<td class="kapali ${isToday(tarih) ? "today" : ""}">`;
+            html += '<td class="kapali">';
             html += "<div>KAPALI</div>";
             html += '<div class="etiket etiket-kapali">GÜN</div>';
             html += "</td>";
           } else if (kapaliSaat) {
-            html += `<td class="kapali ${isToday(tarih) ? "today" : ""}">`;
+            html += '<td class="kapali">';
             html += "<div>KAPALI</div>";
             html += '<div class="etiket etiket-kapali">SAAT</div>';
             html += "</td>";
           } else if (r) {
             if (r.gecmis) {
-              html += `<td class="gecmis ${isToday(tarih) ? "today" : ""}">`;
+              html += '<td class="gecmis">';
               html += "<div>GEÇMİŞ</div>";
               html += '<div class="etiket etiket-gecmis">GEÇMİŞ</div>';
               html += "</td>";
             } else {
-              html += `<td class="dolu ${isToday(tarih) ? "today" : ""}">`;
+              html += '<td class="dolu">';
               html += "<div>DOLU</div>";
               html += '<div class="etiket etiket-dolu">DOLU</div>';
               html += "</td>";
             }
           } else if (slotGecmis) {
-            html += `<td class="gecmis ${isToday(tarih) ? "today" : ""}">`;
+            html += '<td class="gecmis">';
             html += "<div>GEÇMİŞ</div>";
             html += '<div class="etiket etiket-gecmis">SÜRE GEÇTİ</div>';
             html += "</td>";
           } else {
-            html += `<td class="musait ${isToday(tarih) ? "today" : ""}">`;
+            html += '<td class="musait">';
             html += "<div>MÜSAİT</div>";
             html += '<div class="etiket etiket-musait">BOŞ</div>';
             html += "</td>";
