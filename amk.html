@@ -817,7 +817,7 @@ function akilliTarihRenkli(tarih) {
   if (farkGun === 1) return `<span style="color:#1565c0;font-weight:700;">📅 Yarın</span>`;
   if (farkGun <= 6) return `<span style="color:#6a1b9a;font-weight:600;">📅 ${gunler[secili.getDay()]}</span>`;
 
-  return `<span style="color:#111;">📅 ${gun} ${aylar[ay]} ${yil}</span>`;
+  return `<span style="color:#111;font-weight:600;">📅 ${gun} ${aylar[ay]} ${yil}</span>`;
 }
 
 
