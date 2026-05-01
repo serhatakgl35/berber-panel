@@ -437,6 +437,7 @@
     const auth = getAuth(app);
 
     const KOLEKSIYON = "randevular";
+    const GECMIS_KOLEKSIYON = "randevu_gecmisi";
     const KAPALI_GUNLER_KOLEKSIYON = "kapali_gunler";
     const KAPALI_SAATLER_KOLEKSIYON = "kapali_saatler";
     const OTOMATIK_GECMIS_DAKIKA = 1;
@@ -558,23 +559,25 @@
       const limitKey = gunOnceTarihKey(GECMIS_RANDEVU_TEMIZLEME_GUNU);
       const silinecekler = new Map();
 
-      async function tarihAlaninaGoreTopla(alanAdi) {
+      async function tarihAlaninaGoreTopla(koleksiyonAdi, alanAdi) {
         try {
           const q = query(
-            collection(db, KOLEKSIYON),
+            collection(db, koleksiyonAdi),
             where(alanAdi, "<", limitKey)
           );
           const snap = await getDocs(q);
           snap.forEach(function(docItem) {
-            silinecekler.set(docItem.id, docItem.ref);
+            silinecekler.set(koleksiyonAdi + "/" + docItem.id, docItem.ref);
           });
         } catch (error) {
-          console.error(alanAdi + " alanı ile eski randevu temizliği yapılamadı:", error);
+          console.error(koleksiyonAdi + " / " + alanAdi + " alanı ile eski randevu temizliği yapılamadı:", error);
         }
       }
 
-      await tarihAlaninaGoreTopla("date");
-      await tarihAlaninaGoreTopla("tarih");
+      await tarihAlaninaGoreTopla(KOLEKSIYON, "date");
+      await tarihAlaninaGoreTopla(KOLEKSIYON, "tarih");
+      await tarihAlaninaGoreTopla(GECMIS_KOLEKSIYON, "date");
+      await tarihAlaninaGoreTopla(GECMIS_KOLEKSIYON, "tarih");
 
       const silmeler = [];
       silinecekler.forEach(function(ref) {
@@ -583,7 +586,7 @@
 
       if (silmeler.length > 0) {
         await Promise.allSettled(silmeler);
-        console.log(silmeler.length + " adet 15 günden eski randevu silindi.");
+        console.log(silmeler.length + " adet 15 günden eski randevu kaydı silindi.");
       }
     }
 
@@ -724,26 +727,27 @@
 
       const gorulenDoclar = new Set();
 
-      async function randevuSorgula(tarihAlani) {
+      async function randevuSorgula(koleksiyonAdi, tarihAlani) {
         try {
           const q = query(
-            collection(db, KOLEKSIYON),
+            collection(db, koleksiyonAdi),
             where(tarihAlani, ">=", ilkGun),
             where(tarihAlani, "<=", sonGun)
           );
           return await getDocs(q);
         } catch (error) {
-          console.error(tarihAlani + " alanı ile randevular alınamadı:", error);
+          console.error(koleksiyonAdi + " / " + tarihAlani + " alanı ile randevular alınamadı:", error);
           return null;
         }
       }
 
-      function randevuSnapIsle(snap) {
+      function randevuSnapIsle(snap, koleksiyonAdi, arsivKaydiMi) {
         if (!snap) return;
 
         snap.forEach(function(docItem) {
-          if (gorulenDoclar.has(docItem.id)) return;
-          gorulenDoclar.add(docItem.id);
+          const gorulenKey = koleksiyonAdi + "/" + docItem.id;
+          if (gorulenDoclar.has(gorulenKey)) return;
+          gorulenDoclar.add(gorulenKey);
 
           const data = docItem.data() || {};
           const tarih = kayitTarih(data);
@@ -760,13 +764,15 @@
             isim,
             telefon,
             hizmet,
-            gecmis: randevuGecmisMi(data, simdi)
+            gecmis: arsivKaydiMi ? true : randevuGecmisMi(data, simdi)
           };
         });
       }
 
-      randevuSnapIsle(await randevuSorgula("date"));
-      randevuSnapIsle(await randevuSorgula("tarih"));
+      randevuSnapIsle(await randevuSorgula(GECMIS_KOLEKSIYON, "date"), GECMIS_KOLEKSIYON, true);
+      randevuSnapIsle(await randevuSorgula(GECMIS_KOLEKSIYON, "tarih"), GECMIS_KOLEKSIYON, true);
+      randevuSnapIsle(await randevuSorgula(KOLEKSIYON, "date"), KOLEKSIYON, false);
+      randevuSnapIsle(await randevuSorgula(KOLEKSIYON, "tarih"), KOLEKSIYON, false);
 
       return {
         randevuMap,
