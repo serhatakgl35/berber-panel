@@ -250,26 +250,15 @@
 
     .gecmis {
       background: #e4e4e4;
-      color: #666;
+      color: #555;
       font-weight: bold;
       font-size: 11px;
     }
 
-    .gecmis-randevu {
-      background: #e4e4e4;
-      color: #555;
-    }
-
-    .gecmis-randevu .dolu-isim,
-    .gecmis-randevu .dolu-icerik {
-      color: #555;
-    }
-
-    .gecmis-bos {
-      background: #eeeeee;
+    .bos-gecmis {
       color: #999;
-      font-weight: bold;
-      font-size: 11px;
+      font-size: 18px;
+      font-weight: 600;
     }
 
     .kapali-gun-baslik {
@@ -410,7 +399,7 @@
       </div>
 
       <div class="alt-bilgi">
-        Panel otomatik yenilenmez. Güncel verileri görmek için sayfayı manuel yenileyin. Saati geçen boş hücreler gri, randevusu olan geçmiş kayıtlar müşteri bilgisi korunarak gri görünür.
+        Panel otomatik yenilenmez. Güncel verileri görmek için sayfayı manuel yenileyin. Saati geçen randevular müşteri bilgisi korunarak gri görünür.
       </div>
     </div>
   </div>
@@ -448,12 +437,10 @@
     const auth = getAuth(app);
 
     const KOLEKSIYON = "randevular";
-    const RANDEVU_GECMISI_KOLEKSIYON = "randevu_gecmisi";
     const KAPALI_GUNLER_KOLEKSIYON = "kapali_gunler";
     const KAPALI_SAATLER_KOLEKSIYON = "kapali_saatler";
     const OTOMATIK_GECMIS_DAKIKA = 1;
-    // Bugünden 15 günden daha eski randevular bu admin takvim açılınca temizlenir.
-    const ESKI_RANDEVU_TEMIZLEME_GUNU = 15;
+    const GECMIS_RANDEVU_TEMIZLEME_GUNU = 15;
 
     const SAATLER = [
       "09:00",
@@ -551,6 +538,55 @@
       return data.service || data.hizmet || "";
     }
 
+    function htmlGuvenli(deger) {
+      return String(deger ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function gunOnceTarihKey(gunSayisi) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - gunSayisi);
+      return tarihKeyYap(d);
+    }
+
+    async function eskiRandevulariTemizle() {
+      const limitKey = gunOnceTarihKey(GECMIS_RANDEVU_TEMIZLEME_GUNU);
+      const silinecekler = new Map();
+
+      async function tarihAlaninaGoreTopla(alanAdi) {
+        try {
+          const q = query(
+            collection(db, KOLEKSIYON),
+            where(alanAdi, "<", limitKey)
+          );
+          const snap = await getDocs(q);
+          snap.forEach(function(docItem) {
+            silinecekler.set(docItem.id, docItem.ref);
+          });
+        } catch (error) {
+          console.error(alanAdi + " alanı ile eski randevu temizliği yapılamadı:", error);
+        }
+      }
+
+      await tarihAlaninaGoreTopla("date");
+      await tarihAlaninaGoreTopla("tarih");
+
+      const silmeler = [];
+      silinecekler.forEach(function(ref) {
+        silmeler.push(deleteDoc(ref));
+      });
+
+      if (silmeler.length > 0) {
+        await Promise.allSettled(silmeler);
+        console.log(silmeler.length + " adet 15 günden eski randevu silindi.");
+      }
+    }
+
     function parseAppointmentDateTime(dateStr, timeStr) {
       if (!dateStr || !timeStr) return null;
 
@@ -638,50 +674,6 @@
       }
     }
 
-
-    function eskiRandevuSinirTarihiKey() {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() - ESKI_RANDEVU_TEMIZLEME_GUNU);
-      return tarihKeyYap(d);
-    }
-
-    async function eskiRandevulariTemizle() {
-      const sinirTarih = eskiRandevuSinirTarihiKey();
-
-      async function koleksiyonTemizle(koleksiyonAdi) {
-        const gorulenDoclar = new Set();
-
-        async function alanlaTemizle(tarihAlani) {
-          try {
-            const eskiQ = query(
-              collection(db, koleksiyonAdi),
-              where(tarihAlani, "<", sinirTarih)
-            );
-
-            const eskiSnap = await getDocs(eskiQ);
-            const silmeler = [];
-
-            eskiSnap.forEach(function(docItem) {
-              if (gorulenDoclar.has(docItem.id)) return;
-              gorulenDoclar.add(docItem.id);
-              silmeler.push(deleteDoc(doc(db, koleksiyonAdi, docItem.id)));
-            });
-
-            await Promise.all(silmeler);
-          } catch (error) {
-            console.error(koleksiyonAdi + " / " + tarihAlani + " alanı ile eski randevu temizliği yapılamadı:", error);
-          }
-        }
-
-        await alanlaTemizle("date");
-        await alanlaTemizle("tarih");
-      }
-
-      await koleksiyonTemizle(KOLEKSIYON);
-      await koleksiyonTemizle(RANDEVU_GECMISI_KOLEKSIYON);
-    }
-
     async function haftalikVerileriHazirla(gunler) {
       const ilkGun = tarihKeyYap(gunler[0]);
       const sonGun = tarihKeyYap(gunler[4]);
@@ -692,14 +684,12 @@
       const kapaliSaatMap = {};
       const simdi = new Date();
 
-      // Otomatik kapalı günleri (hafta sonu/resmi tatil) Firestore okumadan hesapla.
       gunler.forEach(function(gun) {
         const tarih = tarihKeyYap(gun);
         gunKapaliMap[tarih] = otomatikKapaliGunMu(tarih);
         kapaliSaatMap[tarih] = [];
       });
 
-      // Sadece bu haftanın manuel kapalı günlerini oku.
       try {
         const manuelKapaliGunSnap = await getDocs(collection(db, KAPALI_GUNLER_KOLEKSIYON));
         manuelKapaliGunSnap.forEach(function(docItem) {
@@ -712,7 +702,6 @@
         console.error("Kapalı günler alınamadı:", error);
       }
 
-      // Sadece bu haftanın kapalı saatlerini oku.
       try {
         const kapaliSaatQuery = query(
           collection(db, KAPALI_SAATLER_KOLEKSIYON),
@@ -723,8 +712,8 @@
 
         kapaliSaatSnap.forEach(function(docItem) {
           const data = docItem.data() || {};
-          const tarih = data.tarih || "";
-          const saat = data.saat || "";
+          const tarih = data.tarih || data.date || "";
+          const saat = data.saat || data.time || data.zaman || "";
           if (!tarihSet.has(tarih) || !saat) return;
           if (!kapaliSaatMap[tarih]) kapaliSaatMap[tarih] = [];
           if (!kapaliSaatMap[tarih].includes(saat)) kapaliSaatMap[tarih].push(saat);
@@ -733,41 +722,69 @@
         console.error("Kapalı saatler alınamadı:", error);
       }
 
-      // En önemli optimizasyon: tüm randevuları değil, sadece ekrandaki 5 günü oku.
-      const randevuQuery = query(
-        collection(db, KOLEKSIYON),
-        where("date", ">=", ilkGun),
-        where("date", "<=", sonGun)
-      );
-      const randevuSnap = await getDocs(randevuQuery);
+      const gorulenDoclar = new Set();
 
-      randevuSnap.forEach(function(docItem) {
-        const data = docItem.data() || {};
+      async function randevuSorgula(tarihAlani) {
+        try {
+          const q = query(
+            collection(db, KOLEKSIYON),
+            where(tarihAlani, ">=", ilkGun),
+            where(tarihAlani, "<=", sonGun)
+          );
+          return await getDocs(q);
+        } catch (error) {
+          console.error(tarihAlani + " alanı ile randevular alınamadı:", error);
+          return null;
+        }
+      }
 
-        const tarih = kayitTarih(data);
-        const saat = kayitSaat(data);
-        const isim = kayitAd(data) || "-";
-        const telefon = kayitTelefon(data) || "-";
-        const hizmet = kayitHizmet(data) || "-";
-        const gecmisMi = randevuGecmisMi(data, simdi);
+      function randevuSnapIsle(snap) {
+        if (!snap) return;
 
-        if (!tarih || !saat) return;
-        if (tarih < ilkGun || tarih > sonGun) return;
+        snap.forEach(function(docItem) {
+          if (gorulenDoclar.has(docItem.id)) return;
+          gorulenDoclar.add(docItem.id);
 
-        const key = tarih + "_" + saat;
-        randevuMap[key] = {
-          isim,
-          telefon,
-          hizmet,
-          gecmis: gecmisMi
-        };
-      });
+          const data = docItem.data() || {};
+          const tarih = kayitTarih(data);
+          const saat = kayitSaat(data);
+          const isim = kayitAd(data) || "-";
+          const telefon = kayitTelefon(data) || "-";
+          const hizmet = kayitHizmet(data) || "-";
+
+          if (!tarih || !saat) return;
+          if (tarih < ilkGun || tarih > sonGun) return;
+
+          const key = tarih + "_" + saat;
+          randevuMap[key] = {
+            isim,
+            telefon,
+            hizmet,
+            gecmis: randevuGecmisMi(data, simdi)
+          };
+        });
+      }
+
+      randevuSnapIsle(await randevuSorgula("date"));
+      randevuSnapIsle(await randevuSorgula("tarih"));
 
       return {
         randevuMap,
         gunKapaliMap,
         kapaliSaatMap
       };
+    }
+
+    function randevuBilgisiHTML(r, etiketClass, etiketText) {
+      let html = '<div class="dolu-icerik">';
+      html += '<div class="dolu-isim">' + htmlGuvenli(r.isim) + "</div>";
+      html += "<div>" + htmlGuvenli(r.telefon) + "</div>";
+      html += "<div>" + htmlGuvenli(r.hizmet) + "</div>";
+      if (etiketText) {
+        html += '<div class="etiket ' + etiketClass + '">' + etiketText + "</div>";
+      }
+      html += "</div>";
+      return html;
     }
 
     function tabloHTMLUret(gunler, randevuMap, gunKapaliMap, kapaliSaatMap) {
@@ -806,7 +823,17 @@
           const r = randevuMap[key];
           const slotGecmis = slotGecmisMi(tarih, saat, simdi);
 
-          if (kapaliGun) {
+          if (r) {
+            if (r.gecmis || slotGecmis) {
+              html += '<td class="gecmis">';
+              html += randevuBilgisiHTML(r, "", "");
+              html += "</td>";
+            } else {
+              html += '<td class="dolu">';
+              html += randevuBilgisiHTML(r, "etiket-dolu", "DOLU");
+              html += "</td>";
+            }
+          } else if (kapaliGun) {
             html += '<td class="kapali">';
             html += "<div>KAPALI</div>";
             html += '<div class="etiket etiket-kapali">GÜN</div>';
@@ -816,29 +843,8 @@
             html += "<div>KAPALI</div>";
             html += '<div class="etiket etiket-kapali">SAAT</div>';
             html += "</td>";
-          } else if (r) {
-            if (r.gecmis) {
-              html += '<td class="gecmis-randevu">';
-              html += '<div class="dolu-icerik">';
-              html += '<div class="dolu-isim">' + r.isim + "</div>";
-              html += "<div>" + r.telefon + "</div>";
-              html += "<div>" + r.hizmet + "</div>";
-              html += "</div>";
-              html += "</td>";
-            } else {
-              html += '<td class="dolu">';
-              html += '<div class="dolu-icerik">';
-              html += '<div class="dolu-isim">' + r.isim + "</div>";
-              html += "<div>" + r.telefon + "</div>";
-              html += "<div>" + r.hizmet + "</div>";
-              html += '<div class="etiket etiket-dolu">DOLU</div>';
-              html += "</div>";
-              html += "</td>";
-            }
           } else if (slotGecmis) {
-            html += '<td class="gecmis-bos">';
-            html += "<div>—</div>";
-            html += "</td>";
+            html += '<td class="gecmis bos-gecmis">—</td>';
           } else {
             html += '<td class="musait">';
             html += "<div>MÜSAİT</div>";
