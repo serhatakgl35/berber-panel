@@ -1,0 +1,137 @@
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBUzlpulUCX3OAg2vBjGvHKZQbkswWPxE4",
+  authDomain: "berber-randevu-14f7f.firebaseapp.com",
+  projectId: "berber-randevu-14f7f",
+  storageBucket: "berber-randevu-14f7f.firebasestorage.app",
+  messagingSenderId: "280530860977",
+  appId: "1:280530860977:web:52c0df04c228896f211b90"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const gunlukSayiEl = document.getElementById("gunlukSayi");
+const haftalikSayiEl = document.getElementById("haftalikSayi");
+const aylikSayiEl = document.getElementById("aylikSayi");
+const toplamSayiEl = document.getElementById("toplamSayi");
+const enYogunGunEl = document.getElementById("enYogunGun");
+const gunlukOrtalamaEl = document.getElementById("gunlukOrtalama");
+const aylikFarkEl = document.getElementById("aylikFark");
+const durumMesajiEl = document.getElementById("durumMesaji");
+const refreshBtn = document.getElementById("refreshBtn");
+const aylikGrafikEl = document.getElementById("aylikGrafik");
+const enYogunAyRozetiEl = document.getElementById("enYogunAyRozeti");
+
+// CACHE
+const CACHE_KEY = "istatistik_cache_data";
+const CACHE_DATE_KEY = "istatistik_cache_date";
+const CACHE_TIME_KEY = "istatistik_cache_time";
+
+function formatDateLocal(date) {
+  return date.toISOString().slice(0,10);
+}
+
+function formatDateTimeTR(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleString("tr-TR");
+}
+
+function render(data) {
+  if (!data) return;
+
+  gunlukSayiEl.textContent = data.gunluk;
+  haftalikSayiEl.textContent = data.haftalik;
+  aylikSayiEl.textContent = data.aylik;
+  toplamSayiEl.textContent = data.toplam;
+  enYogunGunEl.textContent = data.enYogunGun;
+  gunlukOrtalamaEl.textContent = data.ortalama;
+  aylikFarkEl.textContent = data.aylikFark;
+
+  const lastUpdate = localStorage.getItem(CACHE_TIME_KEY);
+
+  durumMesajiEl.textContent = "Son güncelleme: " + formatDateTimeTR(lastUpdate);
+}
+
+async function firestoreVeriGetir() {
+  const now = new Date();
+
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const sixMonthsAgoStr = formatDateLocal(sixMonthsAgo);
+
+  const snapshot = await getDocs(query(
+    collection(db, "istatistikler"),
+    where("tarih", ">=", sixMonthsAgoStr)
+  ));
+
+  let toplam = 0;
+  let gunluk = 0;
+  let haftalik = 0;
+  let aylik = 0;
+
+  const todayStr = formatDateLocal(now);
+
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const tarih = data.tarih;
+    const adet = data.toplam || 0;
+
+    toplam += adet;
+
+    if (tarih === todayStr) gunluk += adet;
+
+    const d = new Date(tarih);
+    const diff = (now - d) / (1000*60*60*24);
+
+    if (diff <= 7) haftalik += adet;
+    if (d.getMonth() === now.getMonth()) aylik += adet;
+  });
+
+  return {
+    toplam,
+    gunluk,
+    haftalik,
+    aylik,
+    enYogunGun: "-",
+    ortalama: "-",
+    aylikFark: "-"
+  };
+}
+
+// ANA KONTROL
+async function init() {
+  const today = formatDateLocal(new Date());
+  const cacheDate = localStorage.getItem(CACHE_DATE_KEY);
+
+  if (cacheDate === today) {
+    // CACHE KULLAN
+    const data = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
+    render(data);
+  } else {
+    // FIRESTORE'DAN ÇEK
+    const data = await firestoreVeriGetir();
+
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(CACHE_DATE_KEY, today);
+    localStorage.setItem(CACHE_TIME_KEY, new Date().toISOString());
+
+    render(data);
+  }
+}
+
+// MANUEL YENİLE
+refreshBtn.onclick = async () => {
+  const data = await firestoreVeriGetir();
+
+  localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  localStorage.setItem(CACHE_DATE_KEY, formatDateLocal(new Date()));
+  localStorage.setItem(CACHE_TIME_KEY, new Date().toISOString());
+
+  render(data);
+};
+
+init();
+</script>
