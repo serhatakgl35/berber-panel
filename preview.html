@@ -403,7 +403,7 @@
       </div>
 
       <div class="alt-bilgi">
-        Panel otomatik yenilenmez. Güncel verileri görmek için sayfayı manuel yenileyin. Saati geçen randevular müşteri bilgisi korunarak gri görünür.
+        Panel otomatik yenilenmez. Güncel verileri görmek için sayfayı manuel yenileyin. Randevusu olan saati geçmiş kayıtlar müşteri bilgisi korunarak gri görünür.
       </div>
     </div>
   </div>
@@ -790,8 +790,6 @@
           const kapaliSaatler = kapaliSaatMap[tarih] || [];
           const kapaliSaat = kapaliSaatler.includes(saat);
           const r = randevuMap[key];
-          const slotGecmis = slotGecmisMi(tarih, saat, simdi);
-
           if (kapaliGun) {
             html += '<td class="kapali">';
             html += "<div>KAPALI</div>";
@@ -821,11 +819,6 @@
               html += "</div>";
               html += "</td>";
             }
-          } else if (slotGecmis) {
-            html += '<td class="gecmis">';
-            html += "<div>GEÇMİŞ</div>";
-            html += '<div class="etiket etiket-gecmis">SÜRE GEÇTİ</div>';
-            html += "</td>";
           } else {
             html += '<td class="musait">';
             html += "<div>MÜSAİT</div>";
