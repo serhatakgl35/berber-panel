@@ -724,6 +724,7 @@ import {
   collection,
   addDoc,
   getDocs,
+  getDoc,
   deleteDoc,
   doc,
   query,
@@ -822,6 +823,59 @@ if(aktifAd){
   hosgeldin.textContent = "Hoş geldin, " + aktifAd;
 }else{
   hosgeldin.textContent = "Hoş geldin";
+}
+
+async function musteriAdiniGetir(){
+  try{
+    if(aktifAd){
+      nameInput.value = aktifAd;
+      nameInput.readOnly = true;
+      hosgeldin.textContent = "Hoş geldin, " + aktifAd;
+      return;
+    }
+
+    const temizTel = telefonuDuzenle(aktifTelefon);
+    let bulunanAd = "";
+
+    // 1) Kayıt doküman ID'si telefon ise buradan bul
+    const direktRef = doc(db, "personeller", temizTel);
+    const direktSnap = await getDoc(direktRef);
+
+    if(direktSnap.exists()){
+      const data = direktSnap.data();
+      bulunanAd = data.isim || data.ad || data.name || data.adSoyad || "";
+    }
+
+    // 2) Doküman ID farklıysa telefon alanından ara
+    if(!bulunanAd){
+      const q = query(
+        collection(db, "personeller"),
+        where("telefon", "==", temizTel)
+      );
+
+      const snap = await getDocs(q);
+
+      if(!snap.empty){
+        const data = snap.docs[0].data();
+        bulunanAd = data.isim || data.ad || data.name || data.adSoyad || "";
+      }
+    }
+
+    if(bulunanAd){
+      aktifAd = bulunanAd;
+      localStorage.setItem("musteriAd", aktifAd);
+      nameInput.value = aktifAd;
+      nameInput.readOnly = true;
+      hosgeldin.textContent = "Hoş geldin, " + aktifAd;
+      return;
+    }
+
+    nameInput.readOnly = false;
+    hosgeldin.textContent = "Hoş geldin";
+  }catch(e){
+    console.error("İsim alınamadı:", e);
+    hosgeldin.textContent = "Hoş geldin";
+  }
 }
 
 function toastGoster(metin){
@@ -1571,6 +1625,7 @@ if(/^\d{4}-\d{2}-\d{2}$/.test(urlDate)){
   dateInput.value = urlDate;
 }
 
+await musteriAdiniGetir();
 await sistemiYenile();
 
 if(urlTime){
