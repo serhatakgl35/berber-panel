@@ -6,66 +6,101 @@
 <title>Berber Giriş</title>
 
 <style>
+*{box-sizing:border-box}
+
 body{
 margin:0;
-font-family:Arial;
-background:#f5f5f7;
+font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial;
+background:linear-gradient(135deg,#f5f5f7,#e8e8ed);
+min-height:100vh;
 display:flex;
 align-items:center;
 justify-content:center;
-height:100vh;
+padding:20px;
+color:#111;
 }
 
 .card{
 width:100%;
-max-width:400px;
-background:white;
-padding:25px;
+max-width:420px;
+background:rgba(255,255,255,0.92);
+backdrop-filter:blur(20px);
+border-radius:26px;
+padding:30px;
+box-shadow:0 18px 45px rgba(0,0,0,0.12);
+}
+
+.logo{
+width:62px;
+height:62px;
 border-radius:20px;
-box-shadow:0 10px 30px rgba(0,0,0,0.1);
+background:#111;
+color:#fff;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:28px;
+margin:0 auto 18px;
 }
 
 h1{
 text-align:center;
-margin-bottom:20px;
+margin:0;
+font-size:25px;
+font-weight:800;
+}
+
+.subtitle{
+text-align:center;
+margin:10px 0 25px;
+color:#666;
+font-size:14px;
+}
+
+label{
+display:block;
+margin-bottom:8px;
+font-size:14px;
+font-weight:700;
 }
 
 input{
 width:100%;
-padding:14px;
-margin-bottom:15px;
-border-radius:12px;
+padding:15px;
+border-radius:16px;
 border:1px solid #ddd;
 font-size:16px;
+background:#fafafa;
+margin-bottom:15px;
 }
 
 button{
 width:100%;
-padding:14px;
 border:none;
+border-radius:17px;
 background:#111;
 color:white;
-border-radius:12px;
+padding:15px;
 font-size:16px;
-font-weight:bold;
+font-weight:800;
 cursor:pointer;
 }
 
-.msg{
-margin-top:10px;
-padding:10px;
-border-radius:10px;
+.message{
+margin-top:15px;
+padding:12px;
+border-radius:12px;
 display:none;
 font-size:14px;
 }
 
 .error{
-background:#ffe5e5;
+background:#ffecec;
 color:#b00020;
 }
 
 .success{
-background:#e5ffe9;
+background:#eaffea;
 color:#137333;
 }
 </style>
@@ -74,14 +109,20 @@ color:#137333;
 <body>
 
 <div class="card">
-<h1>Berber Giriş</h1>
+<div class="logo">✂️</div>
 
+<h1>Berber Giriş</h1>
+<p class="subtitle">Randevularını görüntülemek için giriş yap</p>
+
+<label>Telefon Numarası</label>
 <input id="telefon" placeholder="0546 906 65 65">
+
+<label>Şifre</label>
 <input id="sifre" type="password" placeholder="Şifre">
 
 <button onclick="giris()">Giriş Yap</button>
 
-<div id="msg" class="msg"></div>
+<div id="msg" class="message"></div>
 </div>
 
 <script type="module">
@@ -89,14 +130,13 @@ color:#137333;
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/* 🔴 Firebase bilgilerini doldur */
 const firebaseConfig = {
-apiKey: "BURAYA",
-authDomain: "BURAYA",
-projectId: "BURAYA",
-storageBucket: "BURAYA",
-messagingSenderId: "BURAYA",
-appId: "BURAYA"
+apiKey:"BURAYA",
+authDomain:"BURAYA",
+projectId:"BURAYA",
+storageBucket:"BURAYA",
+messagingSenderId:"BURAYA",
+appId:"BURAYA"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -105,53 +145,41 @@ const db = getFirestore(app);
 const telInput = document.getElementById("telefon");
 const msg = document.getElementById("msg");
 
-/* 🔥 FORMAT FONKSİYONU */
-function formatTelefon(value){
+/* 🔥 FORMAT */
+function formatTel(v){
+let t = v.replace(/\D/g,'');
 
-let t = value.replace(/\D/g,'');
+if(t.startsWith("90")) t=t.substring(2);
+if(t.length===10 && t.startsWith("5")) t="0"+t;
 
-// 90 ile başlıyorsa sil
-if(t.startsWith("90")) t = t.substring(2);
+t=t.substring(0,11);
 
-// başı 5 ise 0 ekle
-if(t.length === 10 && t.startsWith("5")) t = "0" + t;
+let s="";
+if(t.length>0) s+=t.substring(0,4);
+if(t.length>=5) s+=" "+t.substring(4,7);
+if(t.length>=8) s+=" "+t.substring(7,9);
+if(t.length>=10) s+=" "+t.substring(9,11);
 
-// max 11 karakter
-t = t.substring(0,11);
-
-// formatla: 0546 906 65 65
-let sonuc = "";
-
-if(t.length > 0) sonuc += t.substring(0,4);
-if(t.length >= 5) sonuc += " " + t.substring(4,7);
-if(t.length >= 8) sonuc += " " + t.substring(7,9);
-if(t.length >= 10) sonuc += " " + t.substring(9,11);
-
-return sonuc;
+return s;
 }
 
-/* 🔥 INPUT YAZARKEN FORMAT */
-telInput.addEventListener("input", (e)=>{
-const cursor = telInput.selectionStart;
-telInput.value = formatTelefon(telInput.value);
-telInput.setSelectionRange(cursor, cursor);
+telInput.addEventListener("input",()=>{
+telInput.value = formatTel(telInput.value);
 });
 
-/* 🔥 FIRESTORE İÇİN TEMİZ HAL */
-function temizTel(v){
+function temiz(v){
 return v.replace(/\D/g,'');
 }
 
 function mesaj(tip,text){
 msg.innerText=text;
-msg.className="msg "+tip;
+msg.className="message "+tip;
 msg.style.display="block";
 }
 
-/* 🔥 GİRİŞ */
 window.giris = async function(){
 
-const telefon = temizTel(telInput.value);
+const telefon = temiz(telInput.value);
 const sifre = document.getElementById("sifre").value;
 
 if(telefon.length !== 11){
@@ -165,14 +193,14 @@ const q = query(collection(db,"berberler"), where("telefon","==",telefon));
 const snap = await getDocs(q);
 
 if(snap.empty){
-mesaj("error","Kayıt yok");
+mesaj("error","Kayıt bulunamadı");
 return;
 }
 
 const data = snap.docs[0].data();
 
 if(data.sifre != sifre){
-mesaj("error","Şifre yanlış");
+mesaj("error","Şifre hatalı");
 return;
 }
 
@@ -186,7 +214,7 @@ localStorage.setItem("berberTelefon",telefon);
 mesaj("success","Giriş başarılı");
 
 setTimeout(()=>{
-window.location.href="berberpanel.html";
+window.location.href="berber-panel.html";
 },500);
 
 }catch(e){
