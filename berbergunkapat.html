@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Takvim Yönetimi</title>
+
+<style>
+body{
+margin:0;
+font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial;
+background:#f5f5f7;
+color:#111;
+}
+
+.container{
+max-width:1100px;
+margin:20px auto;
+padding:15px;
+}
+
+.box{
+background:#fff;
+padding:20px;
+border-radius:20px;
+box-shadow:0 10px 25px rgba(0,0,0,0.08);
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:15px;
+}
+
+th,td{
+border:1px solid #ddd;
+padding:8px;
+text-align:center;
+cursor:pointer;
+}
+
+th{background:#eee}
+
+.kapali{background:#d9d9d9;color:#555;font-weight:bold}
+.musait{background:#dff3df;color:#146214}
+.dolu{background:#ffd9d9;color:#8b0000;font-weight:bold}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<div class="box">
+
+<h2>Takvim Yönetimi</h2>
+<p>Gün veya saatlere tıklayarak aç/kapat yapabilirsin</p>
+
+<div id="takvim"></div>
+
+</div>
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+getFirestore,
+collection,
+getDocs,
+setDoc,
+doc,
+deleteDoc
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+apiKey:"AIzaSyBUzlpulUCX3OAg2vBjGvHKZQbkswWPxE4",
+authDomain:"berber-randevu-14f7f.firebaseapp.com",
+projectId:"berber-randevu-14f7f",
+storageBucket:"berber-randevu-14f7f.firebasestorage.app",
+messagingSenderId:"280530860977",
+appId:"1:280530860977:web:52c0df04c228896f211b90"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+/* 🔥 HERKES YETKİLİ */
+const yetkili = localStorage.getItem("berberGiris") === "true" || localStorage.getItem("adminGiris") === "true";
+
+if(!yetkili){
+location.href="berbergiris.html";
+}
+
+/* 🔥 AYARLAR */
+const SAATLER = ["09:00","09:50","10:30","11:20","13:20","14:00","14:50","15:30"];
+
+/* 🔥 TARİH */
+function tarihKey(d){
+return d.toISOString().split("T")[0];
+}
+
+/* 🔥 HAFTA */
+function hafta(){
+const d=new Date();
+const day=d.getDay();
+const diff=d.getDate()-day+(day===0?-6:1);
+const monday=new Date(d.setDate(diff));
+
+let arr=[];
+for(let i=0;i<5;i++){
+let x=new Date(monday);
+x.setDate(monday.getDate()+i);
+arr.push(x);
+}
+return arr;
+}
+
+/* 🔥 DATA */
+let kapaliGunler={};
+let kapaliSaatler={};
+
+/* 🔥 DATA ÇEK */
+async function verileriAl(){
+
+kapaliGunler={};
+kapaliSaatler={};
+
+const gunSnap=await getDocs(collection(db,"kapali_gunler"));
+gunSnap.forEach(d=>kapaliGunler[d.id]=true);
+
+const saatSnap=await getDocs(collection(db,"kapali_saatler"));
+saatSnap.forEach(d=>{
+const x=d.data();
+kapaliSaatler[x.tarih+"_"+x.saat]=d.id;
+});
+
+}
+
+/* 🔥 TAKVİM ÇİZ */
+async function ciz(){
+
+await verileriAl();
+
+const gunler=hafta();
+
+let html="<table><tr><th>Saat</th>";
+
+gunler.forEach(g=>{
+const t=tarihKey(g);
+const kapali=kapaliGunler[t];
+html+=`<th class="${kapali?'kapali':''}" onclick="gunToggle('${t}')">${t}</th>`;
+});
+
+html+="</tr>";
+
+SAATLER.forEach(s=>{
+
+html+=`<tr><td onclick="saatToggle('${s}')">${s}</td>`;
+
+gunler.forEach(g=>{
+const t=tarihKey(g);
+const key=t+"_"+s;
+
+if(kapaliGunler[t]){
+html+=`<td class="kapali">KAPALI</td>`;
+}
+else if(kapaliSaatler[key]){
+html+=`<td class="kapali" onclick="tekSaatToggle('${t}','${s}')">KAPALI</td>`;
+}
+else{
+html+=`<td class="musait" onclick="tekSaatToggle('${t}','${s}')">MÜSAİT</td>`;
+}
+
+});
+
+html+="</tr>";
+});
+
+html+="</table>";
+
+document.getElementById("takvim").innerHTML=html;
+}
+
+/* 🔥 GÜN TOGGLE */
+window.gunToggle = async function(tarih){
+
+if(kapaliGunler[tarih]){
+await deleteDoc(doc(db,"kapali_gunler",tarih));
+}else{
+await setDoc(doc(db,"kapali_gunler",tarih),{kapali:true});
+}
+
+ciz();
+}
+
+/* 🔥 TEK SAAT TOGGLE */
+window.tekSaatToggle = async function(tarih,saat){
+
+const key=tarih+"_"+saat;
+
+if(kapaliSaatler[key]){
+await deleteDoc(doc(db,"kapali_saatler",kapaliSaatler[key]));
+}else{
+await setDoc(doc(db,"kapali_saatler",Date.now()+""),{
+tarih,saat
+});
+}
+
+ciz();
+}
+
+/* 🔥 TÜM HAFTA SAAT TOGGLE */
+window.saatToggle = async function(saat){
+
+const gunler=hafta();
+
+let hepsiKapali=gunler.every(g=>{
+const t=tarihKey(g);
+return kapaliGunler[t] || kapaliSaatler[t+"_"+saat];
+});
+
+if(hepsiKapali){
+for(const g of gunler){
+const t=tarihKey(g);
+const key=t+"_"+saat;
+if(kapaliSaatler[key]){
+await deleteDoc(doc(db,"kapali_saatler",kapaliSaatler[key]));
+}
+}
+}else{
+for(const g of gunler){
+const t=tarihKey(g);
+if(kapaliGunler[t]) continue;
+
+await setDoc(doc(db,"kapali_saatler",Date.now()+""+Math.random()),{
+tarih:t,
+saat:saat
+});
+}
+}
+
+ciz();
+}
+
+ciz();
+
+</script>
+
+</body>
+</html>
