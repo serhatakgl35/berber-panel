@@ -32,7 +32,7 @@ button.main,.btnMain{width:100%;display:block;text-align:center;background:#111;
   <div class="card loginCard"><div class="logo">☕</div><h1 style="text-align:center">Ödeme Admin</h1><p style="text-align:center">Çay ocağı ödeme takibi</p><label>Admin Kullanıcı</label><input id="adminUser" placeholder="admin"><label>Şifre</label><input id="adminPass" type="password"><button class="main" onclick="adminLogin()">Giriş Yap</button><div id="loginMsg" class="msg"></div></div>
 </div>
 <div id="adminPanel" class="hide">
-  <div class="topbar"><button onclick="adminLogout()">Çıkış</button><a href="index.html">Personel Giriş</a></div>
+  <div class="topbar"><a href="adminpanel.html">Yönetim Merkezi</a><button onclick="adminLogout()">Çıkış</button><a href="index.html">Personel Giriş</a></div>
   <div class="wrap">
     <div class="card">
       <h1>Admin Ödeme Takibi</h1><p>Ödeme dönemi ayın 15'inden sonraki ayın 14'üne kadardır. Yeni dönem her ayın 15'inde başlar.</p>
@@ -51,15 +51,19 @@ button.main,.btnMain{width:100%;display:block;text-align:center;background:#111;
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, getDocs, query, where, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyBUzlpulUCX3OAg2vBjGvHKZQbkswWPxE4",
   authDomain:"berber-randevu-14f7f.firebaseapp.com",
-  projectId:"berber-randevu-14f7f"
+  projectId:"berber-randevu-14f7f",
+  storageBucket:"berber-randevu-14f7f.firebasestorage.app",
+  messagingSenderId:"280530860977",
+  appId:"1:280530860977:web:52c0df04c228896f211b90"
 };
 
-const app=initializeApp(firebaseConfig); const db=getFirestore(app);
+const app=initializeApp(firebaseConfig); const db=getFirestore(app); const auth=getAuth(app);
 
 const ODEME_COLLECTION="cay_odemeler";
 const AYAR_COLLECTION="cay_ayarlar";
@@ -140,20 +144,42 @@ function csvSatir(arr){
 let sonRaporSatirlari = [];
 let sonRaporOzet = null;
 
-const ADMIN_USER="admin"; const ADMIN_PASS="123456";
 let aktifDonemTutari=VARSAYILAN_AIDAT;
+
+async function adminMi(user){
+  try{
+    const snap = await getDoc(doc(db,"admins",user.uid));
+    if(!snap.exists()) return false;
+    const d = snap.data() || {};
+    return d.aktif === true && (!d.role || d.role === "admin");
+  }catch(e){
+    console.error("Admin kontrol hatası", e);
+    return false;
+  }
+}
 
 function getAd(p){return p.isim||p.adSoyad||p.ad||p.name||p.fullName||"İsimsiz Personel";}
 function getTelefonFromDoc(id,p){return temizTelefon(p.telefon||p.phone||p.tel||p.gsm||id||"");}
 function getAktif(p){if(p.aktif===false) return false;if(p.active===false) return false;if(p.durum==="pasif") return false;return true;}
 
 window.adminLogin=function(){
-  const u=document.getElementById("adminUser").value.trim(), p=document.getElementById("adminPass").value.trim();
-  if(u===ADMIN_USER && p===ADMIN_PASS){localStorage.setItem("cay_admin_login","true");adminAc();}
-  else document.getElementById("loginMsg").textContent="Admin bilgileri hatalı";
+  location.href = "adminpanel.html";
 };
-window.adminLogout=function(){localStorage.removeItem("cay_admin_login");location.reload();};
-function adminAc(){document.getElementById("adminLogin").classList.add("hide");document.getElementById("adminPanel").classList.remove("hide");document.getElementById("adminAy").value=donemKey();adminListele();}
+
+window.adminLogout=async function(){
+  localStorage.removeItem("adminLogin");
+  localStorage.removeItem("adminGiris");
+  localStorage.removeItem("cay_admin_login");
+  await signOut(auth);
+  location.href = "adminpanel.html";
+};
+
+function adminAc(){
+  document.getElementById("adminLogin").classList.add("hide");
+  document.getElementById("adminPanel").classList.remove("hide");
+  document.getElementById("adminAy").value=donemKey();
+  adminListele();
+}
 
 window.aylikTutarKaydet=async function(){
   const key=document.getElementById("adminAy").value||donemKey();
@@ -378,6 +404,26 @@ window.reddet=async function(telefon,adSoyad,inputId){
   adminListele();
 };
 
-if(localStorage.getItem("cay_admin_login")==="true") adminAc();
+onAuthStateChanged(auth, async(user)=>{
+  if(!user){
+    localStorage.removeItem("adminLogin");
+    localStorage.removeItem("adminGiris");
+    location.replace("adminpanel.html");
+    return;
+  }
+
+  const ok = await adminMi(user);
+  if(!ok){
+    localStorage.removeItem("adminLogin");
+    localStorage.removeItem("adminGiris");
+    await signOut(auth);
+    location.replace("adminpanel.html");
+    return;
+  }
+
+  localStorage.setItem("adminLogin","true");
+  localStorage.setItem("adminGiris","true");
+  adminAc();
+});
 </script>
 </body></html>
