@@ -141,6 +141,11 @@ p{color:var(--muted);line-height:1.45}
   font-weight:950;
   margin-top:14px;
 }
+.balanceCard h1{margin-bottom:8px}
+.balanceGood{color:#166534}
+.balanceBad{color:#991b1b}
+.balanceNeutral{color:#166534}
+
 @media(max-width:720px){
   .wrap{padding:0 10px}
   .card{padding:18px;border-radius:22px}
@@ -184,6 +189,26 @@ p{color:var(--muted);line-height:1.45}
       </div>
       <div id="copyMsg" class="copyMsg"></div>
       <p class="muted">Açıklama kısmına ad soyad yazılması önerilir.</p>
+    </div>
+  </div>
+
+  <div class="grid" id="bakiyeKartlari" style="margin-bottom:18px;">
+    <div class="card balanceCard">
+      <h3>Geçmiş Bakiye</h3>
+      <h1 id="gecmisBakiye">0 TL</h1>
+      <p id="gecmisBakiyeAciklama" class="muted">Hesaplanıyor...</p>
+    </div>
+
+    <div class="card balanceCard">
+      <h3>Bu Dönem Kalan</h3>
+      <h1 id="buDonemKalan">300 TL</h1>
+      <p id="buDonemKalanAciklama" class="muted">Hesaplanıyor...</p>
+    </div>
+
+    <div class="card balanceCard">
+      <h3>Genel Bakiye</h3>
+      <h1 id="genelBakiye">0 TL</h1>
+      <p id="genelBakiyeAciklama" class="muted">Fazla ödeme varsa borçtan düşülür.</p>
     </div>
   </div>
 
@@ -302,9 +327,8 @@ async function donemTutariGetir(key, fallback = VARSAYILAN_AIDAT){
 }
 
 /*
-  ÖNEMLİ DÜZELTME:
   Ödeme bekliyorsa ödenen tutar 0 kabul edilir.
-  Böylece personel ödeme yapmadıysa "Borç Yok" yazmaz.
+  Ödendi veya reddedildi ise adminin yazdığı tutar hesaplanır.
 */
 function hesaplananOdenenTutar(kayitDurum, kayitTutar){
   if(kayitDurum === "odeme_bekliyor"){
@@ -326,6 +350,38 @@ function borcFazlaHtml(donemTutar, odenenTutar){
   }
 
   return `<span class="tamam">Borç Yok</span>`;
+}
+
+function bakiyeYazi(net){
+  if(net > 0){
+    return {
+      text: `${net} TL Fazla`,
+      cls: "balanceGood",
+      desc: "Fazla ödeme sonraki borçlardan düşülür."
+    };
+  }
+
+  if(net < 0){
+    return {
+      text: `${Math.abs(net)} TL Borç`,
+      cls: "balanceBad",
+      desc: "Eksik ödeme nedeniyle borç görünmektedir."
+    };
+  }
+
+  return {
+    text: "0 TL",
+    cls: "balanceNeutral",
+    desc: "Borç veya fazla ödeme yok."
+  };
+}
+
+function kartBakiyeYaz(id, aciklamaId, net){
+  const info = bakiyeYazi(net);
+  const el = document.getElementById(id);
+  el.textContent = info.text;
+  el.className = info.cls;
+  document.getElementById(aciklamaId).textContent = info.desc;
 }
 
 window.ibanKopyala = async function(){
@@ -400,7 +456,11 @@ async function yukle(){
   });
 
   let aktifDurum = "odeme_bekliyor";
-  let aktifTutar = aktifDonemTutar;
+  let aktifOdenenTutar = 0;
+  let aktifKayitVar = false;
+
+  let gecmisNetBakiye = 0; // + fazla, - borç
+  let buDonemNetBakiye = -aktifDonemTutar;
   let html = "";
 
   for(const o of list){
@@ -409,13 +469,16 @@ async function yukle(){
 
     const kayitDurum = o.durum || "odeme_bekliyor";
     const donemTutar = await donemTutariGetir(key, VARSAYILAN_AIDAT);
-
-    // ödeme bekliyorsa 0 TL; ödenmiş/reddedilmişse adminin yazdığı tutar
     const odenenTutar = hesaplananOdenenTutar(kayitDurum, o.tutar);
+    const donemNetBakiye = odenenTutar - donemTutar;
 
     if(key === aktifDonem){
+      aktifKayitVar = true;
       aktifDurum = kayitDurum;
-      aktifTutar = aktifDonemTutar;
+      aktifOdenenTutar = odenenTutar;
+      buDonemNetBakiye = donemNetBakiye;
+    }else if(key < aktifDonem){
+      gecmisNetBakiye += donemNetBakiye;
     }
 
     html += `
@@ -437,24 +500,9 @@ async function yukle(){
     `;
   }
 
-  document.getElementById("aidatTutar").textContent = aktifTutar + " TL";
+  if(!aktifKayitVar){
+    buDonemNetBakiye = -aktifDonemTutar;
 
-  const durumEl = document.getElementById("personelDurum");
-  durumEl.textContent = durumText(aktifDurum, aktifDonem);
-  durumEl.className = "status " + durumClass(aktifDurum, aktifDonem);
-
-  document.getElementById("uyariAlan").innerHTML = "";
-
-  if(aktifDurum !== "odendi" && donemGectiMi(aktifDonem)){
-    document.getElementById("uyariAlan").innerHTML = `
-      <div class="warningBox">
-        ÖDEME GEÇTİ<br>
-        Dönem: ${ayAdi(aktifDonem)}
-      </div>
-    `;
-  }
-
-  if(!html){
     html = `
       <div class="historyItem">
         <div class="historyLeft">
@@ -467,6 +515,29 @@ async function yukle(){
         </div>
 
         <span class="status bekliyor">Ödeme Bekliyor</span>
+      </div>
+    ` + html;
+  }
+
+  const genelNetBakiye = gecmisNetBakiye + buDonemNetBakiye;
+
+  document.getElementById("aidatTutar").textContent = aktifDonemTutar + " TL";
+
+  const durumEl = document.getElementById("personelDurum");
+  durumEl.textContent = durumText(aktifDurum, aktifDonem);
+  durumEl.className = "status " + durumClass(aktifDurum, aktifDonem);
+
+  kartBakiyeYaz("gecmisBakiye", "gecmisBakiyeAciklama", gecmisNetBakiye);
+  kartBakiyeYaz("buDonemKalan", "buDonemKalanAciklama", buDonemNetBakiye);
+  kartBakiyeYaz("genelBakiye", "genelBakiyeAciklama", genelNetBakiye);
+
+  document.getElementById("uyariAlan").innerHTML = "";
+
+  if(aktifDurum !== "odendi" && donemGectiMi(aktifDonem)){
+    document.getElementById("uyariAlan").innerHTML = `
+      <div class="warningBox">
+        ÖDEME GEÇTİ<br>
+        Dönem: ${ayAdi(aktifDonem)}
       </div>
     `;
   }
