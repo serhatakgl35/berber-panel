@@ -93,7 +93,7 @@
       margin-top:18px;
     }
 
-    input{
+    input, select{
       flex:1;
       min-width:220px;
       border:1px solid #ddd;
@@ -101,6 +101,56 @@
       padding:13px 14px;
       font-size:15px;
       outline:none;
+      background:white;
+    }
+
+    select{
+      max-width:260px;
+      font-weight:800;
+      cursor:pointer;
+    }
+
+    .top10-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:12px;
+      margin-top:16px;
+    }
+
+    .top10-item{
+      background:#f5f5f7;
+      border:1px solid #eee;
+      border-radius:18px;
+      padding:14px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+    }
+
+    .top10-left strong{
+      display:block;
+      font-size:15px;
+      margin-bottom:4px;
+    }
+
+    .top10-left span{
+      color:#666;
+      font-size:13px;
+      font-weight:700;
+    }
+
+    .top10-count{
+      min-width:46px;
+      height:46px;
+      border-radius:16px;
+      background:#111;
+      color:white;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:950;
+      font-size:18px;
     }
 
     button{
@@ -223,8 +273,25 @@
 
       <div class="controls">
         <input id="aramaInput" placeholder="İsim veya telefon ara..." />
+        <select id="siralaSecim" onchange="siralaUygula()">
+          <option value="kayit_desc">Kayıt Tarihi: Yeni → Eski</option>
+          <option value="isim_asc">İsim: A → Z</option>
+          <option value="isim_desc">İsim: Z → A</option>
+          <option value="randevu_desc">Son Randevu: Yeni → Eski</option>
+          <option value="randevu_asc">Son Randevu: Eski → Yeni</option>
+          <option value="toplam_desc">Toplam Randevu: Çok → Az</option>
+          <option value="toplam_asc">Toplam Randevu: Az → Çok</option>
+        </select>
         <button onclick="csvIndir()">Tabloyu İndir</button>
         <button class="secondary" onclick="verileriGetir()">Yenile</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>En Çok Gelenler Top 10</h1>
+      <div class="muted">Toplam randevu sayısına göre otomatik hesaplanır.</div>
+      <div id="top10List" class="top10-grid">
+        <div class="empty">Yükleniyor...</div>
       </div>
     </div>
 
@@ -285,6 +352,8 @@
 
     const tablo = document.getElementById("uyeTablo");
     const aramaInput = document.getElementById("aramaInput");
+    const siralaSecim = document.getElementById("siralaSecim");
+    const top10List = document.getElementById("top10List");
 
     function telefonTemizle(v){
       let t = String(v || "").replace(/\D/g,"");
@@ -493,8 +562,75 @@
         return metin.includes(arama);
       });
 
+      siralaUygula(false);
       tabloYaz();
       istatistikYaz();
+      top10Yaz();
+    }
+
+    function siralaUygula(yenidenYaz = true){
+      const secim = siralaSecim ? siralaSecim.value : "kayit_desc";
+
+      filtreliPersoneller.sort((a,b) => {
+        if(secim === "isim_asc"){
+          return String(a.isim || "").localeCompare(String(b.isim || ""), "tr", {sensitivity:"base"});
+        }
+
+        if(secim === "isim_desc"){
+          return String(b.isim || "").localeCompare(String(a.isim || ""), "tr", {sensitivity:"base"});
+        }
+
+        if(secim === "randevu_asc"){
+          return (a.sonRandevu?.getTime() || 0) - (b.sonRandevu?.getTime() || 0);
+        }
+
+        if(secim === "randevu_desc"){
+          return (b.sonRandevu?.getTime() || 0) - (a.sonRandevu?.getTime() || 0);
+        }
+
+        if(secim === "toplam_desc"){
+          return (b.toplamRandevu || 0) - (a.toplamRandevu || 0);
+        }
+
+        if(secim === "toplam_asc"){
+          return (a.toplamRandevu || 0) - (b.toplamRandevu || 0);
+        }
+
+        const da = tarihObjesi(a.createdAt);
+        const dbb = tarihObjesi(b.createdAt);
+        return (dbb?.getTime() || 0) - (da?.getTime() || 0);
+      });
+
+      if(yenidenYaz){
+        tabloYaz();
+        istatistikYaz();
+      }
+    }
+
+    function top10Yaz(){
+      const liste = [...tumPersoneller]
+        .filter(p => Number(p.toplamRandevu || 0) > 0)
+        .sort((a,b) => {
+          const fark = Number(b.toplamRandevu || 0) - Number(a.toplamRandevu || 0);
+          if(fark !== 0) return fark;
+          return String(a.isim || "").localeCompare(String(b.isim || ""), "tr", {sensitivity:"base"});
+        })
+        .slice(0,10);
+
+      if(liste.length === 0){
+        top10List.innerHTML = `<div class="empty">Henüz randevusu olan personel yok.</div>`;
+        return;
+      }
+
+      top10List.innerHTML = liste.map((p, i) => `
+        <div class="top10-item">
+          <div class="top10-left">
+            <strong>${i + 1}. ${htmlTemizle(p.isim)}</strong>
+            <span>${htmlTemizle(p.telefon)} • Son: ${p.sonRandevu ? tarihYaz(p.sonRandevu) : "-"}</span>
+          </div>
+          <div class="top10-count">${Number(p.toplamRandevu || 0)}</div>
+        </div>
+      `).join("");
     }
 
     function tabloYaz(){
@@ -588,10 +724,12 @@
     }
 
     aramaInput.addEventListener("input", filtrele);
+    siralaSecim.addEventListener("change", () => siralaUygula(true));
 
     window.verileriGetir = verileriGetir;
     window.personelSil = personelSil;
     window.csvIndir = csvIndir;
+    window.siralaUygula = siralaUygula;
 
     verileriGetir();
   </script>
