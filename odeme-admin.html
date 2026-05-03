@@ -42,6 +42,8 @@ button.main,.btnMain{width:100%;display:block;text-align:center;background:#111;
         <div><label>Bu Dönem Toplanacak Tutar</label><input id="aylikTutarInput" type="number" min="0" placeholder="Örn: 600"></div>
       </div>
       <button class="main" onclick="aylikTutarKaydet()">Bu Dönem Tutarını Kaydet</button>
+      <button class="main" style="margin-top:12px;background:#15803d" onclick="csvIndir()">Tabloyu CSV İndir</button>
+      <p class="muted">CSV dosyası Excel’de açılır. İçinde dönem aidatı, ödenen tutar, geçmiş bakiye, bu dönem bakiye ve genel bakiye bulunur.</p>
     </div>
     <div class="card"><h3>Özet</h3><div id="adminOzet" class="grid"></div></div>
     <div class="card"><h3>Personel Listesi</h3><div class="tableWrap"><table><thead><tr><th>Personel</th><th>Telefon</th><th>Dönem</th><th>Ödenen Tutar</th><th>Durum</th><th>İşlem</th></tr></thead><tbody id="adminTable"></tbody></table></div></div>
@@ -111,6 +113,33 @@ function borcFazlaHtml(donemTutar, odenenTutar){
   return `<span class="tamam">Borç Yok</span>`;
 }
 
+function hesaplananOdenenTutar(durum, tutar){
+  if(durum === "odeme_bekliyor") return 0;
+  return Number(tutar || 0);
+}
+
+function bakiyeText(net){
+  net = Number(net || 0);
+  if(net > 0) return net + " TL Fazla";
+  if(net < 0) return Math.abs(net) + " TL Borç";
+  return "0 TL";
+}
+
+function csvEscape(v){
+  v = String(v ?? "");
+  if(v.includes('"') || v.includes(";") || v.includes("\n")){
+    return '"' + v.replaceAll('"','""') + '"';
+  }
+  return v;
+}
+
+function csvSatir(arr){
+  return arr.map(csvEscape).join(";");
+}
+
+let sonRaporSatirlari = [];
+let sonRaporOzet = null;
+
 const ADMIN_USER="admin"; const ADMIN_PASS="123456";
 let aktifDonemTutari=VARSAYILAN_AIDAT;
 
@@ -144,28 +173,82 @@ window.adminListele=async function(){
   document.getElementById("aylikTutarInput").value=aktifDonemTutari;
 
   const personelSnap=await getDocs(collection(db,PERSONEL_COLLECTION));
-  const odemeSnap=await getDocs(query(collection(db,ODEME_COLLECTION),where("ay","==",key)));
+  const tumOdemeSnap=await getDocs(collection(db,ODEME_COLLECTION));
 
-  const odemeler={};
-  odemeSnap.forEach(d=>{const o={id:d.id,...d.data()}; if(o.telefon) odemeler[temizTelefon(o.telefon)]=o; if(o.personelId) odemeler[temizTelefon(o.personelId)]=o;});
+  const tumOdemeler={};
+  tumOdemeSnap.forEach(d=>{
+    const o={id:d.id,...d.data()};
+    const telKey=temizTelefon(o.telefon || o.personelId || "");
+    if(!telKey) return;
+    if(!tumOdemeler[telKey]) tumOdemeler[telKey]=[];
+    tumOdemeler[telKey].push(o);
+  });
 
   let personeller=[];
-  personelSnap.forEach(pdoc=>{const p={id:pdoc.id,...pdoc.data()}; if(getAktif(p)) personeller.push(p);});
+  personelSnap.forEach(pdoc=>{
+    const p={id:pdoc.id,...pdoc.data()};
+    if(getAktif(p)) personeller.push(p);
+  });
   personeller.sort((a,b)=>getAd(a).localeCompare(getAd(b),"tr",{sensitivity:"base"}));
 
-  let rows="", say={odendi:0,odeme_bekliyor:0,reddedildi:0}, toplamOnayliTutar=0;
-  const beklenenToplam=personeller.length*aktifDonemTutari;
+  let rows="";
+  let say={odendi:0,odeme_bekliyor:0,reddedildi:0};
+  let toplamOnayliTutar=0;
+  let toplamBeklenen=0;
+  let toplamOdenen=0;
+  let toplamGecmisNet=0;
+  let toplamBuDonemNet=0;
+  let toplamGenelNet=0;
 
-  personeller.forEach(personel=>{
+  sonRaporSatirlari=[];
+
+  for(const personel of personeller){
     const tel=getTelefonFromDoc(personel.id,personel);
     const ad=getAd(personel);
-    const odeme=odemeler[tel];
-    const durum=odeme ? (odeme.durum||"odeme_bekliyor") : "odeme_bekliyor";
-    const tutar=Number(odeme?.tutar||aktifDonemTutari||VARSAYILAN_AIDAT);
+    const kayitlar=(tumOdemeler[tel]||[]).filter(o=>o.ay && String(o.ay).includes("-"));
+
+    const buDonemKayit=kayitlar.find(o=>o.ay===key);
+    const durum=buDonemKayit ? (buDonemKayit.durum||"odeme_bekliyor") : "odeme_bekliyor";
+    const tutar=Number(buDonemKayit?.tutar||aktifDonemTutari||VARSAYILAN_AIDAT);
+    const buDonemOdenen=hesaplananOdenenTutar(durum,tutar);
+    const buDonemNet=buDonemOdenen-aktifDonemTutari;
+
+    let gecmisNet=0;
+
+    for(const o of kayitlar){
+      const oKey=o.ay;
+      if(oKey >= key) continue;
+      const oDurum=o.durum||"odeme_bekliyor";
+      const oDonemTutar=await donemTutariGetir(db,oKey,VARSAYILAN_AIDAT);
+      const oOdenen=hesaplananOdenenTutar(oDurum,o.tutar);
+      gecmisNet += (oOdenen-oDonemTutar);
+    }
+
+    const genelNet=gecmisNet+buDonemNet;
 
     say[durum]=(say[durum]||0)+1;
     if(durum==="odendi") toplamOnayliTutar+=Number(tutar||0);
-    if(filtre!=="hepsi" && filtre!==durum) return;
+
+    toplamBeklenen += aktifDonemTutari;
+    toplamOdenen += buDonemOdenen;
+    toplamGecmisNet += gecmisNet;
+    toplamBuDonemNet += buDonemNet;
+    toplamGenelNet += genelNet;
+
+    sonRaporSatirlari.push({
+      ad,
+      tel,
+      donem:donemLabel(key),
+      donemKey:key,
+      donemAidati:aktifDonemTutari,
+      odenenTutar:buDonemOdenen,
+      gecmisBakiye:bakiyeText(gecmisNet),
+      buDonemBakiye:bakiyeText(buDonemNet),
+      genelBakiye:bakiyeText(genelNet),
+      durum:durumText(durum,key)
+    });
+
+    if(filtre!=="hepsi" && filtre!==durum) continue;
 
     const inputId="tutar_"+tel;
     const safeAd=String(ad).replaceAll("'","\\'");
@@ -176,14 +259,30 @@ window.adminListele=async function(){
         <td>${tel}</td>
         <td>${donemLabel(key)}</td>
         <td><input id="${inputId}" class="tutarInput" type="number" min="0" value="${tutar}" placeholder="${aktifDonemTutari}"> TL</td>
-        <td><span class="status ${durumClass(durum,key)}">${durumText(durum,key)}</span></td>
+        <td>
+          <span class="status ${durumClass(durum,key)}">${durumText(durum,key)}</span><br>
+          <span class="${genelNet<0?'borc':genelNet>0?'fazla':'tamam'}" style="margin-top:6px">${bakiyeText(genelNet)}</span>
+        </td>
         <td>
           <button class="small green" onclick="durumDegistir('${tel}','${safeAd}','odendi','${inputId}')">Ödendi</button>
           <button class="small gray" onclick="durumDegistir('${tel}','${safeAd}','odeme_bekliyor','${inputId}')">Bekliyor</button>
           <button class="small red" onclick="reddet('${tel}','${safeAd}','${inputId}')">Reddet</button>
         </td>
       </tr>`;
-  });
+  }
+
+  sonRaporOzet={
+    donem:donemLabel(key),
+    donemAidati:aktifDonemTutari,
+    toplamBeklenen,
+    toplamOdenen,
+    gecmisBakiye:bakiyeText(toplamGecmisNet),
+    buDonemBakiye:bakiyeText(toplamBuDonemNet),
+    genelBakiye:bakiyeText(toplamGenelNet),
+    odendi:say.odendi,
+    bekliyor:say.odeme_bekliyor,
+    reddedildi:say.reddedildi
+  };
 
   document.getElementById("adminTable").innerHTML=rows||`<tr><td colspan="6">Kayıt yok.</td></tr>`;
   document.getElementById("adminOzet").innerHTML=`
@@ -191,8 +290,63 @@ window.adminListele=async function(){
     <div class="card"><h3>Ödendi</h3><h1>${say.odendi}</h1></div>
     <div class="card"><h3>Ödeme Bekliyor</h3><h1>${say.odeme_bekliyor}</h1></div>
     <div class="card"><h3>Reddedildi</h3><h1>${say.reddedildi}</h1></div>
-    <div class="card"><h3>Beklenen Toplam</h3><h1>${beklenenToplam} TL</h1></div>
-    <div class="card"><h3>Onaylanan Toplam</h3><h1>${toplamOnayliTutar} TL</h1></div>`;
+    <div class="card"><h3>Beklenen Toplam</h3><h1>${toplamBeklenen} TL</h1></div>
+    <div class="card"><h3>Bu Dönem Ödenen</h3><h1>${toplamOdenen} TL</h1></div>
+    <div class="card"><h3>Geçmiş Bakiye</h3><h1>${bakiyeText(toplamGecmisNet)}</h1></div>
+    <div class="card"><h3>Genel Bakiye</h3><h1>${bakiyeText(toplamGenelNet)}</h1></div>`;
+};
+
+window.csvIndir=function(){
+  if(!sonRaporSatirlari.length){
+    alert("Önce listeyi yenile.");
+    return;
+  }
+
+  const key=document.getElementById("adminAy").value||donemKey();
+
+  const rows=[
+    ["Personel Adı","Telefon","Dönem","Dönem Anahtarı","Dönem Aidatı","Ödenen Tutar","Geçmiş Bakiye","Bu Dönem Bakiye","Genel Bakiye","Durum"]
+  ];
+
+  sonRaporSatirlari.forEach(r=>{
+    rows.push([
+      r.ad,
+      r.tel,
+      r.donem,
+      r.donemKey,
+      r.donemAidati,
+      r.odenenTutar,
+      r.gecmisBakiye,
+      r.buDonemBakiye,
+      r.genelBakiye,
+      r.durum
+    ]);
+  });
+
+  rows.push([]);
+  rows.push(["ÖZET"]);
+  rows.push(["Dönem",sonRaporOzet.donem]);
+  rows.push(["Dönem Aidatı",sonRaporOzet.donemAidati]);
+  rows.push(["Toplam Beklenen",sonRaporOzet.toplamBeklenen]);
+  rows.push(["Toplam Ödenen",sonRaporOzet.toplamOdenen]);
+  rows.push(["Geçmiş Bakiye",sonRaporOzet.gecmisBakiye]);
+  rows.push(["Bu Dönem Bakiye",sonRaporOzet.buDonemBakiye]);
+  rows.push(["Genel Bakiye",sonRaporOzet.genelBakiye]);
+  rows.push(["Ödendi",sonRaporOzet.odendi]);
+  rows.push(["Ödeme Bekliyor",sonRaporOzet.bekliyor]);
+  rows.push(["Reddedildi",sonRaporOzet.reddedildi]);
+
+  const csv = "\uFEFF" + rows.map(csvSatir).join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="cay-odeme-raporu-"+key+".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 };
 
 window.durumDegistir=async function(telefon,adSoyad,yeniDurum,inputId){
