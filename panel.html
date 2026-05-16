@@ -79,9 +79,45 @@
 </style>
 
 <script>
+<script>
+const iframe = document.querySelector("#reklamPopup iframe");
+
+iframe.onload = () => {
+
+  try{
+
+    const iframeDoc =
+      iframe.contentWindow.document;
+
+    const yazi =
+      iframeDoc.body.innerText || "";
+
+    if(
+      yazi.includes("Aktif reklam bulunamadı") ||
+      yazi.includes("Reklamlar yüklenirken hata oluştu")
+    ){
+
+      document
+        .getElementById("reklamPopup")
+        .style.display = "none";
+
+      return;
+    }
+
+  }catch(e){}
+
+};
+
 document
   .getElementById("reklamKapat")
   .onclick = () => {
+
+    document
+      .getElementById("reklamPopup")
+      .style.display = "none";
+
+  };
+</script>
 
     document
       .getElementById("reklamPopup")
