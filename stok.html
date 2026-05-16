@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <title>Kantin Stok Listesi</title>
+
 <style>
 :root{--bg:#f5f5f7;--card:#fff;--text:#111;--muted:#6b7280;--line:#e5e7eb;--shadow:0 18px 55px rgba(0,0,0,.08)}
 *{box-sizing:border-box}
@@ -17,6 +18,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .badge{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:10px 13px;font-weight:900;white-space:nowrap}
 .top .badge{background:#fff;border:1px solid var(--line)}
 .btn{border:0;border-radius:14px;background:#111;color:#fff;padding:10px 14px;font-weight:900;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.btnLight{background:#fff;color:#111;border:1px solid var(--line)}
 .filters{margin:18px 0;display:flex;gap:10px;flex-wrap:wrap}
 .input,select{border:1px solid var(--line);background:#fff;border-radius:16px;padding:13px 14px;font:inherit;outline:none}
 .input{min-width:240px;flex:1}
@@ -34,18 +36,27 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 .gateCard{max-width:430px;width:100%;background:#fff;border-radius:26px;border:1px solid var(--line);box-shadow:var(--shadow);padding:26px;text-align:center}
 .gateCard h1{margin:10px 0;font-size:24px}.gateCard p{color:var(--muted);line-height:1.5;margin-bottom:18px}
+.startBox{background:#fff;border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow);padding:28px;text-align:center;margin-top:18px}
+.startBox h2{margin:0 0 10px;font-size:26px}
+.startBox p{margin:0 0 18px;color:var(--muted);line-height:1.5}
+.cacheNote{font-size:13px;color:var(--muted);margin-top:10px}
 @media(max-width:1050px){.grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:760px){.topin,.hero{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:repeat(2,1fr);gap:12px}.hero h1{font-size:24px}.img{height:140px}.body{padding:12px}.name{font-size:14px}.input,select{width:100%;min-width:0}}
 @media(max-width:420px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
+
 <body>
 <div id="app"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
-import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getFirestore,
+  collection,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig={
   apiKey:"AIzaSyBUzlpulUCX3OAg2vBjGvHKZQbkswWPxE4",
@@ -54,23 +65,40 @@ const firebaseConfig={
   storageBucket:"berber-randevu-14f7f.firebasestorage.app",
   messagingSenderId:"280530860977",
   appId:"1:280530860977:web:52c0df04c228896f211b90",
-  measurementId: "G-NK6DBBQQNZ"};
+  measurementId:"G-NK6DBBQQNZ"
+};
 
 const GIRIS_SAYFASI="index.html";
 const PANEL_SAYFASI="panel.html";
 const FIYAT_GOSTER=false;
 const STOK_ADEDI_GOSTER=true;
 
+const CACHE_KEY="kantin_stok_cache_v1";
+const CACHE_TIME_KEY="kantin_stok_cache_time_v1";
+const CACHE_SURESI=10*60*1000;
+
 const app=initializeApp(firebaseConfig);
 getAnalytics(app);
 const db=getFirestore(app);
+
 let products=[];
+let yuklendi=false;
 
 function storageBulunduMu(){
   const arr=[];
-  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);arr.push({key:k,value:localStorage.getItem(k)})}
-  for(let i=0;i<sessionStorage.length;i++){const k=sessionStorage.key(i);arr.push({key:k,value:sessionStorage.getItem(k)})}
+
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    arr.push({key:k,value:localStorage.getItem(k)});
+  }
+
+  for(let i=0;i<sessionStorage.length;i++){
+    const k=sessionStorage.key(i);
+    arr.push({key:k,value:sessionStorage.getItem(k)});
+  }
+
   const keys=["personel","giris","login","uye","user","kullanici","telefon","ad","soyad"];
+
   return arr.some(item=>{
     const s=String(item.key+" "+item.value).toLowerCase();
     const giris=s.includes("true")||s.includes("aktif")||s.includes("personel")||s.includes("telefon")||s.includes("uid")||s.includes("ad")||s.includes("soyad");
@@ -81,45 +109,86 @@ function storageBulunduMu(){
 function personelGirisKontrol(){
   if(!storageBulunduMu()){
     document.getElementById("app").innerHTML=`
-    <div class="gate"><div class="gateCard">
-      <div style="font-size:44px">🔒</div>
-      <h1>Personel Girişi Gerekli</h1>
-      <p>Bu stok listesi sadece giriş yapmış personeller tarafından görüntülenebilir.</p>
-      <a class="btn" href="${GIRIS_SAYFASI}">Giriş Sayfasına Git</a>
-    </div></div>`;
-    setTimeout(()=>{window.location.href=GIRIS_SAYFASI},1600);
+      <div class="gate">
+        <div class="gateCard">
+          <div style="font-size:44px">🔒</div>
+          <h1>Personel Girişi Gerekli</h1>
+          <p>Bu stok listesi sadece giriş yapmış personeller tarafından görüntülenebilir.</p>
+          <a class="btn" href="${GIRIS_SAYFASI}">Giriş Sayfasına Git</a>
+        </div>
+      </div>
+    `;
+
+    setTimeout(()=>{
+      window.location.href=GIRIS_SAYFASI;
+    },1600);
+
     return false;
   }
+
   return true;
 }
 
 function sayfayiKur(){
   document.getElementById("app").innerHTML=`
-  <div class="top"><div class="topin">
-    <div class="brand"><b>Kantin Stok Listesi</b><span>Güncel ürün durumu</span></div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <a class="btn" href="${PANEL_SAYFASI}">Panele Dön</a>
-      <div class="badge" id="countBadge">Yükleniyor...</div>
+    <div class="top">
+      <div class="topin">
+        <div class="brand">
+          <b>Kantin Stok Listesi</b>
+          <span>Güncel ürün durumu</span>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <a class="btn" href="${PANEL_SAYFASI}">Panele Dön</a>
+          <div class="badge" id="countBadge">Hazır</div>
+        </div>
+      </div>
     </div>
-  </div></div>
-  <main class="wrap">
-    <section class="hero">
-      <div><h1>Ürünleri kontrol et</h1><p>Arama yapabilir, kategoriye göre filtreleyebilir ve stok durumunu görebilirsin.</p></div>
-      <div class="badge" id="updateBadge">Güncelleniyor</div>
-    </section>
-    <div class="filters">
-      <input id="search" class="input" placeholder="Ürün adı veya barkod ara...">
-      <select id="cat"><option value="">Tüm kategoriler</option></select>
-      <select id="stock">
-        <option value="mevcut" selected>Stokta olanlar</option>
-        <option value="">Tüm stoklar</option>
-        <option value="ok">Stokta var</option>
-        <option value="az">Az kaldı</option>
-        <option value="yok">Tükendi</option>
-      </select>
-    </div>
-    <section id="list" class="grid"><div class="loading">Ürünler yükleniyor...</div></section>
-  </main>`;
+
+    <main class="wrap">
+      <section class="hero">
+        <div>
+          <h1>Ürünleri kontrol et</h1>
+          <p>Read azaltmak için ürünler sayfa açılır açılmaz yüklenmez.</p>
+        </div>
+
+        <div class="badge" id="updateBadge">Beklemede</div>
+      </section>
+
+      <div id="startBox" class="startBox">
+        <h2>Stok listesi hazır</h2>
+        <p>
+          Ürünleri görmek için aşağıdaki butona bas.
+          Aynı cihazda 10 dakika içinde tekrar girersen Firestore okumadan kayıtlı liste gösterilir.
+        </p>
+
+        <button class="btn" onclick="stoklariGoster(false)">Stokları Göster</button>
+        <button class="btn btnLight" onclick="stoklariGoster(true)">Yenile</button>
+
+        <div class="cacheNote" id="cacheNote"></div>
+      </div>
+
+      <div class="filters" id="filters" style="display:none">
+        <input id="search" class="input" placeholder="Ürün adı veya barkod ara...">
+
+        <select id="cat">
+          <option value="">Tüm kategoriler</option>
+        </select>
+
+        <select id="stock">
+          <option value="mevcut" selected>Stokta olanlar</option>
+          <option value="">Tüm stoklar</option>
+          <option value="ok">Stokta var</option>
+          <option value="az">Az kaldı</option>
+          <option value="yok">Tükendi</option>
+        </select>
+      </div>
+
+      <section id="list" class="grid"></section>
+    </main>
+  `;
+
+  cacheBilgisiYaz();
 }
 
 const $=id=>document.getElementById(id);
@@ -136,34 +205,110 @@ function esc(s){
 
 function st(q){
   const miktar=Number(q||0);
+
   if(miktar<=0)return["yok","TÜKENDİ"];
   if(miktar<=5)return["az","AZ KALDI"];
+
   return["ok","STOKTA VAR"];
 }
 
-function fmtDate(ts){
+function fmtDateFromMs(ms){
   try{
-    const d=ts?.toDate?ts.toDate():null;
-    return d?d.toLocaleString("tr-TR",{dateStyle:"short",timeStyle:"short"}):"Güncel";
-  }catch{return"Güncel"}
+    return new Date(ms).toLocaleString("tr-TR",{
+      dateStyle:"short",
+      timeStyle:"short"
+    });
+  }catch{
+    return "Güncel";
+  }
 }
 
 function otomatikGorsel(p){
   if(p.gorselUrl && String(p.gorselUrl).trim()){
     return p.gorselUrl;
   }
+
   return "";
 }
 
+function cacheVarMi(){
+  const raw=localStorage.getItem(CACHE_KEY);
+  const time=Number(localStorage.getItem(CACHE_TIME_KEY)||0);
+
+  if(!raw || !time)return false;
+
+  return Date.now()-time<CACHE_SURESI;
+}
+
+function cacheBilgisiYaz(){
+  const el=document.getElementById("cacheNote");
+  if(!el)return;
+
+  const time=Number(localStorage.getItem(CACHE_TIME_KEY)||0);
+
+  if(!time){
+    el.textContent="Bu cihazda kayıtlı stok listesi yok.";
+    return;
+  }
+
+  const dakika=Math.max(0,Math.ceil((CACHE_SURESI-(Date.now()-time))/60000));
+
+  if(cacheVarMi()){
+    el.textContent="Kayıtlı liste var. Yaklaşık "+dakika+" dakika Firestore okumadan açılabilir.";
+  }else{
+    el.textContent="Kayıtlı liste süresi dolmuş. Yenileme gerekebilir.";
+  }
+}
+
+function cacheOku(){
+  try{
+    if(!cacheVarMi())return null;
+
+    const raw=localStorage.getItem(CACHE_KEY);
+    return JSON.parse(raw);
+  }catch{
+    return null;
+  }
+}
+
+function cacheYaz(data){
+  try{
+    localStorage.setItem(CACHE_KEY,JSON.stringify(data));
+    localStorage.setItem(CACHE_TIME_KEY,String(Date.now()));
+  }catch(e){
+    console.log("Cache yazılamadı",e);
+  }
+}
+
+function filtreleriAktifEt(){
+  $("filters").style.display="flex";
+
+  $("search").oninput=render;
+  $("cat").onchange=render;
+  $("stock").onchange=render;
+}
+
 function render(){
-  const q=key($("search").value),c=$("cat").value,sf=$("stock").value;
+  if(!yuklendi)return;
+
+  const q=key($("search").value);
+  const c=$("cat").value;
+  const sf=$("stock").value;
+
   const cats=[...new Set(products.map(p=>p.kategori||"Genel"))].sort((a,b)=>a.localeCompare(b,"tr"));
   const keep=$("cat").value;
-  $("cat").innerHTML='<option value="">Tüm kategoriler</option>'+cats.map(x=>`<option ${x===keep?"selected":""}>${esc(x)}</option>`).join("");
+
+  $("cat").innerHTML='<option value="">Tüm kategoriler</option>'+
+    cats.map(x=>`<option ${x===keep?"selected":""}>${esc(x)}</option>`).join("");
 
   const filtered=products.filter(p=>{
     const ss=st(p.miktar)[0];
-    return(!q||key(p.ad).includes(q)||key(p.barkod).includes(q))&&(!c||(p.kategori||"Genel")===c)&&(!sf||(sf==="mevcut"?ss!=="yok":ss===sf));
+
+    return(
+      (!q||key(p.ad).includes(q)||key(p.barkod).includes(q)) &&
+      (!c||(p.kategori||"Genel")===c) &&
+      (!sf||(sf==="mevcut"?ss!=="yok":ss===sf))
+    );
   });
 
   $("countBadge").textContent=filtered.length+" ürün";
@@ -175,32 +320,59 @@ function render(){
   }
 
   $("list").className="grid";
+
   $("list").innerHTML=filtered.map(p=>{
     const s=st(p.miktar);
     const img=otomatikGorsel(p);
 
     return`
-    <article class="card">
-      <div class="img">
-        ${img?`<img src="${esc(img)}" alt="${esc(p.ad)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.textContent='📦'">`:"📦"}
-      </div>
-      <div class="body">
-        <div class="name">${esc(p.ad)}</div>
-        <div class="meta">${esc(p.kategori||"Genel")}${p.barkod?" · "+esc(p.barkod):""}</div>
-        <div class="price ${FIYAT_GOSTER?"":"hiddenPrice"}">${Number(p.satisFiyat||0).toLocaleString("tr-TR")} TL</div>
-        <div class="foot">
-          <span class="pill ${s[0]}">${s[1]}</span>
-          <span class="qty">${STOK_ADEDI_GOSTER?Number(p.miktar||0)+" adet":""}</span>
+      <article class="card">
+        <div class="img">
+          ${
+            img
+              ? `<img src="${esc(img)}" alt="${esc(p.ad)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.textContent='📦'">`
+              : "📦"
+          }
         </div>
-      </div>
-    </article>`;
+
+        <div class="body">
+          <div class="name">${esc(p.ad)}</div>
+          <div class="meta">${esc(p.kategori||"Genel")}${p.barkod?" · "+esc(p.barkod):""}</div>
+          <div class="price ${FIYAT_GOSTER?"":"hiddenPrice"}">${Number(p.satisFiyat||0).toLocaleString("tr-TR")} TL</div>
+
+          <div class="foot">
+            <span class="pill ${s[0]}">${s[1]}</span>
+            <span class="qty">${STOK_ADEDI_GOSTER?Number(p.miktar||0)+" adet":""}</span>
+          </div>
+        </div>
+      </article>
+    `;
   }).join("");
 }
 
-async function load(){
+window.stoklariGoster=async function(forceRefresh=false){
   try{
+    $("startBox").style.display="none";
+    $("filters").style.display="none";
+    $("list").className="grid";
+    $("list").innerHTML='<div class="loading">Ürünler yükleniyor...</div>';
     $("countBadge").textContent="Yükleniyor...";
-    $("updateBadge").textContent="Güncelleniyor";
+    $("updateBadge").textContent="Kontrol ediliyor";
+
+    const cached=forceRefresh ? null : cacheOku();
+
+    if(cached && Array.isArray(cached.products)){
+      products=cached.products;
+      yuklendi=true;
+
+      $("updateBadge").textContent="Kayıtlı liste: "+fmtDateFromMs(cached.time || Number(localStorage.getItem(CACHE_TIME_KEY)||Date.now()));
+
+      filtreleriAktifEt();
+      render();
+      return;
+    }
+
+    $("updateBadge").textContent="Firestore okunuyor";
 
     const snap=await getDocs(collection(db,"stok_urunleri"));
 
@@ -209,20 +381,32 @@ async function load(){
       .filter(p=>p.aktif!==false)
       .sort((a,b)=>String(a.ad||"").localeCompare(String(b.ad||""),"tr"));
 
-    const dates=products.map(p=>p.updatedAt).filter(Boolean).sort((a,b)=>{
-      const da=a?.toDate?a.toDate().getTime():0;
-      const dbb=b?.toDate?b.toDate().getTime():0;
-      return da-dbb;
-    });
+    const cacheData={
+      time:Date.now(),
+      products:products
+    };
 
-    const last=dates.length?dates[dates.length-1]:null;
-    $("updateBadge").textContent=last?"Son güncelleme: "+fmtDate(last):"Güncel liste";
+    cacheYaz(cacheData);
+
+    yuklendi=true;
+
+    $("updateBadge").textContent="Son güncelleme: "+fmtDateFromMs(cacheData.time);
+
+    filtreleriAktifEt();
     render();
 
   }catch(e){
     console.error(e);
+
     $("list").className="";
-    $("list").innerHTML=`<div class="empty">Stok listesi yüklenemedi.<br><br>Firestore Rules içinde <b>stok_urunleri</b> için <b>allow read: if true;</b> olmalı.</div>`;
+    $("list").innerHTML=`
+      <div class="empty">
+        Stok listesi yüklenemedi.
+        <br><br>
+        Firestore Rules içinde <b>stok_urunleri</b> için okuma izni olmalı.
+      </div>
+    `;
+
     $("countBadge").textContent="Hata";
     $("updateBadge").textContent="Bağlantı hatası";
   }
@@ -230,10 +414,6 @@ async function load(){
 
 if(personelGirisKontrol()){
   sayfayiKur();
-  $("search").oninput=render;
-  $("cat").onchange=render;
-  $("stock").onchange=render;
-  load();
 }
 </script>
 </body>
