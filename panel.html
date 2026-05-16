@@ -1,3 +1,94 @@
+<!-- TAM EKRAN REKLAM -->
+<div id="reklamPopup">
+  <button id="reklamKapat">✕</button>
+
+  <iframe
+    src="reklam.html"
+    frameborder="0"
+    allowfullscreen>
+  </iframe>
+</div>
+
+<style>
+#reklamPopup{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  background:#000;
+  z-index:999999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  animation:reklamFade .35s ease;
+}
+
+@keyframes reklamFade{
+  from{
+    opacity:0;
+    transform:scale(1.02);
+  }
+  to{
+    opacity:1;
+    transform:scale(1);
+  }
+}
+
+#reklamPopup iframe{
+  width:100%;
+  height:100%;
+  border:none;
+  background:#000;
+}
+
+#reklamKapat{
+  position:absolute;
+  top:22px;
+  right:22px;
+  width:62px;
+  height:62px;
+  border:none;
+  border-radius:50%;
+  background:rgba(255,255,255,.16);
+  backdrop-filter:blur(14px);
+  color:#fff;
+  font-size:32px;
+  font-weight:1000;
+  cursor:pointer;
+  z-index:1000000;
+  transition:.2s;
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
+}
+
+#reklamKapat:hover{
+  transform:scale(1.08);
+  background:rgba(255,255,255,.28);
+}
+
+@media(max-width:768px){
+
+  #reklamKapat{
+    width:54px;
+    height:54px;
+    top:14px;
+    right:14px;
+    font-size:26px;
+  }
+
+}
+</style>
+
+<script>
+document
+  .getElementById("reklamKapat")
+  .onclick = () => {
+
+    document
+      .getElementById("reklamPopup")
+      .style.display = "none";
+
+  };
+</script>
 <!DOCTYPE html>
 <html lang="tr">
 <head>
