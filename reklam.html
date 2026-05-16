@@ -7,6 +7,7 @@
 
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
+
     body{
       width:100vw;
       height:100vh;
@@ -122,22 +123,27 @@
       font-weight:800;
       text-align:center;
       color:#fff;
+      padding:24px;
     }
 
     @media(max-width:900px){
       .screen{padding:16px}
+
       .card{
         grid-template-columns:1fr;
         border-radius:28px;
       }
+
       .imageArea{height:42vh}
+
       .content{
         padding:34px;
         gap:18px;
       }
+
       .badge{font-size:18px}
       .title{font-size:30px}
-      .product{font-size:48px}
+      .product{font-size:48px;letter-spacing:-1px}
       .desc{font-size:22px}
       .price{font-size:52px}
       .footer{font-size:15px}
@@ -158,8 +164,7 @@
       collection,
       query,
       where,
-      orderBy,
-      onSnapshot
+      getDocs
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -181,6 +186,15 @@
       return v === undefined || v === null || v === "" ? varsayilan : String(v);
     }
 
+    function guvenliYaz(v){
+      return String(v || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
     function reklamGoster() {
       if (!reklamlar.length) {
         appDiv.className = "loading";
@@ -190,10 +204,10 @@
 
       const r = reklamlar[aktifIndex];
 
-      const baslik = temizleMetin(r.baslik, "KANTİNE YENİ GELDİ");
-      const urunAdi = temizleMetin(r.urunAdi, "Yeni Ürün");
-      const aciklama = temizleMetin(r.aciklama, "Bugün kantinde satışta.");
-      const fiyat = temizleMetin(r.fiyat, "");
+      const baslik = guvenliYaz(temizleMetin(r.baslik, "KANTİNE YENİ GELDİ"));
+      const urunAdi = guvenliYaz(temizleMetin(r.urunAdi, "Yeni Ürün"));
+      const aciklama = guvenliYaz(temizleMetin(r.aciklama, "Bugün kantinde satışta."));
+      const fiyat = guvenliYaz(temizleMetin(r.fiyat, ""));
       const resim = temizleMetin(r.resim, "");
 
       appDiv.className = "card";
@@ -221,27 +235,37 @@
     function sliderBaslat() {
       if (timer) clearInterval(timer);
       reklamGoster();
-      timer = setInterval(reklamGoster, 8000);
+
+      if (reklamlar.length > 1) {
+        timer = setInterval(reklamGoster, 8000);
+      }
     }
 
-   const q = query(
-  collection(db, "reklamlar"),
-  where("aktif", "==", true)
-);
+    async function reklamlariYukle() {
+      try {
+        const q = query(
+          collection(db, "reklamlar"),
+          where("aktif", "==", true)
+        );
 
-    onSnapshot(q, (snap) => {
-      reklamlar = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+        const snap = await getDocs(q);
 
-      aktifIndex = 0;
-      sliderBaslat();
-    }, (err) => {
-      console.error(err);
-      appDiv.className = "loading";
-      appDiv.innerHTML = "Reklamlar yüklenirken hata oluştu.";
-    });
+        reklamlar = snap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        aktifIndex = 0;
+        sliderBaslat();
+
+      } catch (err) {
+        console.error(err);
+        appDiv.className = "loading";
+        appDiv.innerHTML = "Reklamlar yüklenirken hata oluştu.";
+      }
+    }
+
+    reklamlariYukle();
   </script>
 </body>
 </html>
