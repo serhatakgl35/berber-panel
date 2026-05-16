@@ -78,13 +78,13 @@ button.main,.btnMain{width:100%;display:block;text-align:center;background:#111;
       <div class="grid">
         <div>
           <label>Dönem Seç</label>
-          <input id="adminAy" type="month" onchange="adminListele()">
+          <input id="adminAy" type="month" onchange="donemDegisti()">
           <p class="muted" id="donemLabelAdmin"></p>
         </div>
 
         <div>
           <label>Filtre</label>
-          <select id="adminFiltre" onchange="adminListele()">
+          <select id="adminFiltre" onchange="adminEkraniCiz()">
             <option value="hepsi">Hepsi</option>
             <option value="odendi">Ödendi</option>
             <option value="odeme_bekliyor">Ödeme Bekliyor</option>
@@ -98,13 +98,16 @@ button.main,.btnMain{width:100%;display:block;text-align:center;background:#111;
         </div>
       </div>
 
-      <button class="main" onclick="aylikTutarKaydet()">Bu Dönem Tutarını Kaydet</button>
+      <button class="main" style="background:#2563eb" onclick="adminListele(false)">Seçili Dönemi Yükle / Listele</button>
+      <button class="main" style="margin-top:12px;background:#4b5563" onclick="adminListele(true)">Personel Cache Yenile</button>
+      <button class="main" style="margin-top:12px" onclick="aylikTutarKaydet()">Bu Dönem Tutarını Kaydet</button>
       <button class="main" style="margin-top:12px;background:#15803d" onclick="csvIndir()">Tabloyu CSV İndir</button>
+      <p class="muted" id="readInfo" style="margin-top:10px">Liste henüz yüklenmedi. Read azaltmak için tablo otomatik açılmaz.</p>
 
       <div class="toolsRow">
         <div>
           <label>Personel Ara</label>
-          <input id="personelArama" class="searchInput" placeholder="İsim yazınca liste filtrelenir" oninput="adminListele()">
+          <input id="personelArama" class="searchInput" placeholder="İsim yazınca liste filtrelenir" oninput="adminEkraniCiz()">
         </div>
 
         <div class="importBox">
@@ -180,7 +183,7 @@ www.kantin10.com.tr sitesinden ödeme durumlarınızı görebilirsiniz.</textare
               <th>İşlem</th>
             </tr>
           </thead>
-          <tbody id="adminTable"></tbody>
+          <tbody id="adminTable"><tr><td colspan="5">Listeyi görmek için üstteki <b>Seçili Dönemi Yükle / Listele</b> butonuna bas.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -250,6 +253,15 @@ let whatsappIndex=0;
 let whatsappAktifDonem="";
 let whatsappMesajSablon="";
 
+const PERSONEL_CACHE_KEY="cay_personel_cache_v3";
+const PERSONEL_CACHE_TIME_KEY="cay_personel_cache_time_v3";
+const PERSONEL_CACHE_SURE=30*60*1000;
+
+let aktifPersoneller=[];
+let aktifOdemeler={};
+let aktifDonemKey="";
+let listeYuklendi=false;
+
 async function adminMi(user){try{const snap=await getDoc(doc(db,"admins",user.uid));if(!snap.exists())return false;const d=snap.data()||{};return d.aktif===true&&(!d.role||d.role==="admin");}catch(e){console.error("Admin kontrol hatası",e);return false;}}
 function getAd(p){return p.isim||p.adSoyad||p.ad||p.name||p.fullName||"İsimsiz Personel";}
 function normalizeTR(v){return String(v||"").toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/ı/g,"i").replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ö/g,"o").replace(/ç/g,"c").replace(/[^a-z0-9 ]/gi," ").replace(/\s+/g," ").trim();}
@@ -281,35 +293,137 @@ async function donemOdemeleriGetir(key){
 
 window.adminLogin=function(){location.href="adminpanel.html";};
 window.adminLogout=async function(){localStorage.removeItem("adminLogin");localStorage.removeItem("adminGiris");localStorage.removeItem("cay_admin_login");await signOut(auth);location.href="adminpanel.html";};
-function adminAc(){document.getElementById("adminLogin").classList.add("hide");document.getElementById("adminPanel").classList.remove("hide");document.getElementById("adminAy").value=donemKey();adminListele();}
+function adminAc(){
+  document.getElementById("adminLogin").classList.add("hide");
+  document.getElementById("adminPanel").classList.remove("hide");
+  document.getElementById("adminAy").value=donemKey();
+  donemDegisti();
+  document.getElementById("adminOzet").innerHTML=`<div class="card"><h3>Hazır</h3><p class="muted">Liste otomatik yüklenmez. Read azaltmak için dönem seçip butona bas.</p></div>`;
+}
 
-window.aylikTutarKaydet=async function(){const key=document.getElementById("adminAy").value||donemKey();const tutar=Number(document.getElementById("aylikTutarInput").value||0);if(!tutar||tutar<=0)return alert("Geçerli bir tutar gir.");await setDoc(doc(db,AYAR_COLLECTION,key),{aylikTutar:tutar,donem:key,donemEtiketi:donemLabel(key),updatedAt:serverTimestamp()},{merge:true});alert("Dönem tutarı kaydedildi.");adminListele();};
-
-window.adminListele=async function(){
+window.aylikTutarKaydet=async function(){
   const key=document.getElementById("adminAy").value||donemKey();
+  const tutar=Number(document.getElementById("aylikTutarInput").value||0);
+  if(!tutar||tutar<=0)return alert("Geçerli bir tutar gir.");
+  await setDoc(doc(db,AYAR_COLLECTION,key),{aylikTutar:tutar,donem:key,donemEtiketi:donemLabel(key),updatedAt:serverTimestamp()},{merge:true});
+  aktifDonemTutari=tutar;
+  alert("Dönem tutarı kaydedildi.");
+  if(listeYuklendi) adminEkraniCiz();
+};
+
+
+window.donemDegisti=function(){
+  const key=document.getElementById("adminAy").value||donemKey();
+  document.getElementById("donemLabelAdmin").textContent="Dönem: "+donemLabel(key);
+  listeYuklendi=false;
+  sonRaporSatirlari=[];
+  sonRaporOzet=null;
+  document.getElementById("adminTable").innerHTML=`<tr><td colspan="5">Dönem değişti. Listeyi görmek için <b>Seçili Dönemi Yükle / Listele</b> butonuna bas.</td></tr>`;
+  document.getElementById("adminOzet").innerHTML=`<div class="card"><h3>Dönem Seçildi</h3><p class="muted">${donemLabel(key)}</p></div>`;
+  const readInfo=document.getElementById("readInfo");
+  if(readInfo) readInfo.textContent="Dönem değişti. Firestore okumamak için tablo otomatik yenilenmedi.";
+};
+
+function personelCacheOku(){
+  try{
+    const raw=localStorage.getItem(PERSONEL_CACHE_KEY);
+    const time=Number(localStorage.getItem(PERSONEL_CACHE_TIME_KEY)||0);
+    if(!raw||!time)return null;
+    if(Date.now()-time>PERSONEL_CACHE_SURE)return null;
+    const arr=JSON.parse(raw);
+    return Array.isArray(arr)?arr:null;
+  }catch(e){
+    return null;
+  }
+}
+
+function personelCacheYaz(arr){
+  try{
+    localStorage.setItem(PERSONEL_CACHE_KEY,JSON.stringify(arr));
+    localStorage.setItem(PERSONEL_CACHE_TIME_KEY,String(Date.now()));
+  }catch(e){
+    console.warn("Personel cache yazılamadı",e);
+  }
+}
+
+async function personelleriGetir(forceRefresh=false){
+  if(!forceRefresh){
+    const cached=personelCacheOku();
+    if(cached){
+      const readInfo=document.getElementById("readInfo");
+      if(readInfo) readInfo.textContent="Personel listesi cache’den açıldı. Bu bölüm için personel read oluşmadı.";
+      return cached;
+    }
+  }
+
+  const snap=await getDocs(collection(db,PERSONEL_COLLECTION));
+  const arr=[];
+  snap.forEach(pdoc=>{
+    const p={id:pdoc.id,...pdoc.data()};
+    if(getAktif(p))arr.push(p);
+  });
+
+  arr.sort((a,b)=>getAd(a).localeCompare(getAd(b),"tr",{sensitivity:"base"}));
+  personelCacheYaz(arr);
+
+  const readInfo=document.getElementById("readInfo");
+  if(readInfo) readInfo.textContent=`Personel listesi Firestore’dan okundu: ${arr.length} personel. 30 dakika cache’de tutulacak.`;
+
+  return arr;
+}
+
+window.adminListele=async function(forcePersonelRefresh=false){
+  const key=document.getElementById("adminAy").value||donemKey();
+
+  try{
+    document.getElementById("adminTable").innerHTML=`<tr><td colspan="5">Liste yükleniyor...</td></tr>`;
+    document.getElementById("donemLabelAdmin").textContent="Dönem: "+donemLabel(key);
+
+    aktifDonemTutari=await donemTutariGetir(db,key,VARSAYILAN_AIDAT);
+    document.getElementById("aylikTutarInput").value=aktifDonemTutari;
+
+    aktifPersoneller=await personelleriGetir(forcePersonelRefresh);
+    aktifOdemeler=await donemOdemeleriGetir(key);
+    aktifDonemKey=key;
+    listeYuklendi=true;
+
+    adminEkraniCiz();
+
+    const odemeSayisi=Object.keys(aktifOdemeler).length;
+    const readInfo=document.getElementById("readInfo");
+    if(readInfo){
+      readInfo.textContent += ` Seçili dönem ödeme kaydı: ${odemeSayisi}. Arama/filtre artık read oluşturmaz.`;
+    }
+
+  }catch(e){
+    console.error(e);
+    document.getElementById("adminTable").innerHTML=`<tr><td colspan="5">Liste yüklenemedi: ${e.message}</td></tr>`;
+    const readInfo=document.getElementById("readInfo");
+    if(readInfo) readInfo.textContent="Liste yüklenirken hata oluştu.";
+  }
+};
+
+window.adminEkraniCiz=function(){
+  if(!listeYuklendi){
+    const key=document.getElementById("adminAy").value||donemKey();
+    document.getElementById("donemLabelAdmin").textContent="Dönem: "+donemLabel(key);
+    return;
+  }
+
+  const key=aktifDonemKey || document.getElementById("adminAy").value || donemKey();
   const filtre=document.getElementById("adminFiltre").value;
   const arama=normalizeTR(document.getElementById("personelArama")?.value||"");
-  document.getElementById("donemLabelAdmin").textContent="Dönem: "+donemLabel(key);
-  aktifDonemTutari=await donemTutariGetir(db,key,VARSAYILAN_AIDAT);
-  document.getElementById("aylikTutarInput").value=aktifDonemTutari;
-
-  const personelSnap=await getDocs(collection(db,PERSONEL_COLLECTION));
-  const buDonemOdemeler=await donemOdemeleriGetir(key);
-
-  let personeller=[];
-  personelSnap.forEach(pdoc=>{const p={id:pdoc.id,...pdoc.data()};if(getAktif(p))personeller.push(p);});
-  personeller.sort((a,b)=>getAd(a).localeCompare(getAd(b),"tr",{sensitivity:"base"}));
 
   let rows="";
   let say={odendi:0,odeme_bekliyor:0,reddedildi:0};
   let toplamBeklenen=0,toplamOdenen=0,toplamGecmisNet=0,toplamBuDonemNet=0,toplamGenelNet=0;
   sonRaporSatirlari=[];
 
-  for(const personel of personeller){
+  for(const personel of aktifPersoneller){
     const tel=getTelefonFromDoc(personel.id,personel);
     const ad=getAd(personel);
-    const aramaUygun=!arama||normalizeTR(ad).includes(arama)||normalizeTR(tel).includes(arama);
-    const buDonemKayit=buDonemOdemeler[tel]||null;
+
+    const buDonemKayit=aktifOdemeler[tel]||null;
     const durum=buDonemKayit?(buDonemKayit.durum||"odeme_bekliyor"):"odeme_bekliyor";
     const tutar=buDonemKayit&&buDonemKayit.tutar!==undefined?Number(buDonemKayit.tutar):aktifDonemTutari;
     const buDonemOdenen=hesaplananOdenenTutar(durum,tutar);
@@ -318,19 +432,62 @@ window.adminListele=async function(){
     const genelNet=gecmisNet+buDonemNet;
 
     say[durum]=(say[durum]||0)+1;
-    toplamBeklenen+=aktifDonemTutari;toplamOdenen+=buDonemOdenen;toplamGecmisNet+=gecmisNet;toplamBuDonemNet+=buDonemNet;toplamGenelNet+=genelNet;
-    sonRaporSatirlari.push({ad,tel,donem:donemLabel(key),donemKey:key,donemAidati:aktifDonemTutari,odenenTutar:buDonemOdenen,gecmisBakiye:bakiyeText(gecmisNet),buDonemBakiye:bakiyeText(buDonemNet),genelBakiye:bakiyeText(genelNet),durum:durumText(durum,key)});
+    toplamBeklenen+=aktifDonemTutari;
+    toplamOdenen+=buDonemOdenen;
+    toplamGecmisNet+=gecmisNet;
+    toplamBuDonemNet+=buDonemNet;
+    toplamGenelNet+=genelNet;
+
+    sonRaporSatirlari.push({
+      ad,tel,donem:donemLabel(key),donemKey:key,donemAidati:aktifDonemTutari,
+      odenenTutar:buDonemOdenen,gecmisBakiye:bakiyeText(gecmisNet),
+      buDonemBakiye:bakiyeText(buDonemNet),genelBakiye:bakiyeText(genelNet),
+      durum:durumText(durum,key)
+    });
+
+    const aramaUygun=!arama||normalizeTR(ad).includes(arama)||normalizeTR(tel).includes(arama);
     if(filtre!=="hepsi"&&filtre!==durum)continue;
     if(!aramaUygun)continue;
+
     const inputId="tutar_"+tel;
     const safeAd=String(ad).replaceAll("'","\\'");
-    rows+=`<tr><td data-label="Personel">${ad}</td><td data-label="Dönem">${donemLabel(key)}</td><td data-label="Ödenen Tutar"><input id="${inputId}" class="tutarInput" type="number" min="0" value="${tutar}" placeholder="${aktifDonemTutari}"> TL</td><td data-label="Durum"><span class="status ${durumClass(durum,key)}">${durumText(durum,key)}</span><br><span class="${genelNet<0?'borc':genelNet>0?'fazla':'tamam'}" style="margin-top:6px">${bakiyeText(genelNet)}</span></td><td data-label="İşlem"><button class="small green" onclick="durumDegistir('${tel}','${safeAd}','odendi','${inputId}')">Ödendi</button><button class="small gray" onclick="durumDegistir('${tel}','${safeAd}','odeme_bekliyor','${inputId}')">Bekliyor</button><button class="small red" onclick="reddet('${tel}','${safeAd}','${inputId}')">Reddet</button></td></tr>`;
+    rows+=`<tr>
+      <td data-label="Personel">${ad}</td>
+      <td data-label="Dönem">${donemLabel(key)}</td>
+      <td data-label="Ödenen Tutar"><input id="${inputId}" class="tutarInput" type="number" min="0" value="${tutar}" placeholder="${aktifDonemTutari}"> TL</td>
+      <td data-label="Durum">
+        <span class="status ${durumClass(durum,key)}">${durumText(durum,key)}</span>
+        <br>
+        <span class="${genelNet<0?'borc':genelNet>0?'fazla':'tamam'}" style="margin-top:6px">${bakiyeText(genelNet)}</span>
+      </td>
+      <td data-label="İşlem">
+        <button class="small green" onclick="durumDegistir('${tel}','${safeAd}','odendi','${inputId}')">Ödendi</button>
+        <button class="small gray" onclick="durumDegistir('${tel}','${safeAd}','odeme_bekliyor','${inputId}')">Bekliyor</button>
+        <button class="small red" onclick="reddet('${tel}','${safeAd}','${inputId}')">Reddet</button>
+      </td>
+    </tr>`;
   }
 
-  sonRaporOzet={donem:donemLabel(key),donemAidati:aktifDonemTutari,toplamBeklenen,toplamOdenen,gecmisBakiye:bakiyeText(toplamGecmisNet),buDonemBakiye:bakiyeText(toplamBuDonemNet),genelBakiye:bakiyeText(toplamGenelNet),odendi:say.odendi,bekliyor:say.odeme_bekliyor,reddedildi:say.reddedildi};
+  sonRaporOzet={
+    donem:donemLabel(key),donemAidati:aktifDonemTutari,toplamBeklenen,toplamOdenen,
+    gecmisBakiye:bakiyeText(toplamGecmisNet),buDonemBakiye:bakiyeText(toplamBuDonemNet),
+    genelBakiye:bakiyeText(toplamGenelNet),odendi:say.odendi,
+    bekliyor:say.odeme_bekliyor,reddedildi:say.reddedildi
+  };
+
   document.getElementById("adminTable").innerHTML=rows||`<tr><td colspan="5">Kayıt yok.</td></tr>`;
-  document.getElementById("adminOzet").innerHTML=`<div class="card"><h3>Bu Dönem Aidatı</h3><h1>${aktifDonemTutari} TL</h1></div><div class="card"><h3>Ödendi</h3><h1>${say.odendi}</h1></div><div class="card"><h3>Ödeme Bekliyor</h3><h1>${say.odeme_bekliyor}</h1></div><div class="card"><h3>Reddedildi</h3><h1>${say.reddedildi}</h1></div><div class="card"><h3>Beklenen Toplam</h3><h1>${toplamBeklenen} TL</h1></div><div class="card"><h3>Bu Dönem Ödenen</h3><h1>${toplamOdenen} TL</h1></div><div class="card"><h3>Geçmiş Bakiye</h3><h1>${bakiyeText(toplamGecmisNet)}</h1></div><div class="card"><h3>Genel Bakiye</h3><h1>${bakiyeText(toplamGenelNet)}</h1></div>`;
+
+  document.getElementById("adminOzet").innerHTML=`
+    <div class="card"><h3>Bu Dönem Aidatı</h3><h1>${aktifDonemTutari} TL</h1></div>
+    <div class="card"><h3>Ödendi</h3><h1>${say.odendi}</h1></div>
+    <div class="card"><h3>Ödeme Bekliyor</h3><h1>${say.odeme_bekliyor}</h1></div>
+    <div class="card"><h3>Reddedildi</h3><h1>${say.reddedildi}</h1></div>
+    <div class="card"><h3>Beklenen Toplam</h3><h1>${toplamBeklenen} TL</h1></div>
+    <div class="card"><h3>Bu Dönem Ödenen</h3><h1>${toplamOdenen} TL</h1></div>
+    <div class="card"><h3>Geçmiş Bakiye</h3><h1>${bakiyeText(toplamGecmisNet)}</h1></div>
+    <div class="card"><h3>Genel Bakiye</h3><h1>${bakiyeText(toplamGenelNet)}</h1></div>`;
 };
+
 
 function whatsappDurumCiz(){
   const box=document.getElementById("waQueueBox");
@@ -499,8 +656,64 @@ window.csvIndir=function(){
   const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="cay-odeme-raporu-"+key+".csv";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 };
 
-window.durumDegistir=async function(telefon,adSoyad,yeniDurum,inputId){const key=document.getElementById("adminAy").value||donemKey();const tel=temizTelefon(telefon);const inputEl=document.getElementById(inputId);const rawTutar=inputEl?inputEl.value:"";let girilenTutar=rawTutar===""?(aktifDonemTutari||VARSAYILAN_AIDAT):Number(rawTutar);if(!Number.isFinite(girilenTutar)||girilenTutar<0)return alert("Tutar 0 veya daha büyük olmalı.");const ref=doc(db,ODEME_COLLECTION,odemeDocId(key,tel));await setDoc(ref,{personelId:tel,telefon:tel,adSoyad,ay:key,donemEtiketi:donemLabel(key),tutar:girilenTutar,durum:yeniDurum,adminNot:"",updatedAt:serverTimestamp()},{merge:true});adminListele();};
-window.reddet=async function(telefon,adSoyad,inputId){const sebep=prompt("Reddetme sebebi:","Ödeme görünmedi");const key=document.getElementById("adminAy").value||donemKey();const tel=temizTelefon(telefon);const inputEl=document.getElementById(inputId);const rawTutar=inputEl?inputEl.value:"";let girilenTutar=rawTutar===""?(aktifDonemTutari||VARSAYILAN_AIDAT):Number(rawTutar);if(!Number.isFinite(girilenTutar)||girilenTutar<0)return alert("Tutar 0 veya daha büyük olmalı.");const ref=doc(db,ODEME_COLLECTION,odemeDocId(key,tel));await setDoc(ref,{personelId:tel,telefon:tel,adSoyad,ay:key,donemEtiketi:donemLabel(key),tutar:girilenTutar,durum:"reddedildi",adminNot:sebep||"Reddedildi",updatedAt:serverTimestamp()},{merge:true});adminListele();};
+window.durumDegistir=async function(telefon,adSoyad,yeniDurum,inputId){
+  const key=document.getElementById("adminAy").value||aktifDonemKey||donemKey();
+  const tel=temizTelefon(telefon);
+  const inputEl=document.getElementById(inputId);
+  const rawTutar=inputEl?inputEl.value:"";
+  let girilenTutar=rawTutar===""?(aktifDonemTutari||VARSAYILAN_AIDAT):Number(rawTutar);
+
+  if(!Number.isFinite(girilenTutar)||girilenTutar<0)return alert("Tutar 0 veya daha büyük olmalı.");
+
+  const ref=doc(db,ODEME_COLLECTION,odemeDocId(key,tel));
+  const yeniKayit={
+    personelId:tel,
+    telefon:tel,
+    adSoyad,
+    ay:key,
+    donemEtiketi:donemLabel(key),
+    tutar:girilenTutar,
+    durum:yeniDurum,
+    adminNot:"",
+    updatedAt:serverTimestamp()
+  };
+
+  await setDoc(ref,yeniKayit,{merge:true});
+
+  aktifOdemeler[tel]={...yeniKayit,updatedAt:new Date()};
+  listeYuklendi=true;
+  adminEkraniCiz();
+};
+
+window.reddet=async function(telefon,adSoyad,inputId){
+  const sebep=prompt("Reddetme sebebi:","Ödeme görünmedi");
+  const key=document.getElementById("adminAy").value||aktifDonemKey||donemKey();
+  const tel=temizTelefon(telefon);
+  const inputEl=document.getElementById(inputId);
+  const rawTutar=inputEl?inputEl.value:"";
+  let girilenTutar=rawTutar===""?(aktifDonemTutari||VARSAYILAN_AIDAT):Number(rawTutar);
+
+  if(!Number.isFinite(girilenTutar)||girilenTutar<0)return alert("Tutar 0 veya daha büyük olmalı.");
+
+  const ref=doc(db,ODEME_COLLECTION,odemeDocId(key,tel));
+  const yeniKayit={
+    personelId:tel,
+    telefon:tel,
+    adSoyad,
+    ay:key,
+    donemEtiketi:donemLabel(key),
+    tutar:girilenTutar,
+    durum:"reddedildi",
+    adminNot:sebep||"Reddedildi",
+    updatedAt:serverTimestamp()
+  };
+
+  await setDoc(ref,yeniKayit,{merge:true});
+
+  aktifOdemeler[tel]={...yeniKayit,updatedAt:new Date()};
+  listeYuklendi=true;
+  adminEkraniCiz();
+};
 
 window.ornekDekontCsvIndir=function(){const rows=[["Personel","Tutar"],["MUHAMMET SAÇAL","300"],["SERHAT AKGÜL","2700"],["BÜNYAMİN KAPLAN","300"]];const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:32},{wch:12}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Ödeme Şablonu");XLSX.writeFile(wb,"cay-odeme-isim-tutar-sablonu.xlsx");};
 
@@ -525,7 +738,7 @@ window.dekontIceriAktar=async function(){
     for(const r of rows){const adRaw=String(getAlan(r,["Personel","Ad Soyad","Adı Soyadı","Adi Soyadi","İsim","Isim","Açıklama","Aciklama","Gönderen","Gonderen","Alıcı","Alici"])||"").trim();const tutarRaw=getAlan(r,["Tutar","Miktar","Ödenen Tutar","Odenen Tutar","İşlem Tutarı","Islem Tutari","İşlem Tutarı (TL)","Islem Tutari (TL)","Amount"]);const tutar=parseMoney(tutarRaw);if(!adRaw){eslesmeyen++;eslesmeyenler.push("İsim boş satır");continue;}if(tutar===null||tutar<0){tutarsiz++;continue;}if(tutar===0)continue;const kisi=eslesenKisiyiBul(adRaw,personeller);if(!kisi){eslesmeyen++;eslesmeyenler.push(adRaw);continue;}await setDoc(doc(db,ODEME_COLLECTION,odemeDocId(key,kisi.tel)),{personelId:kisi.tel,telefon:kisi.tel,adSoyad:kisi.ad,ay:key,donemEtiketi:donemLabel(key),tutar:tutar,durum:"odendi",adminNot:"İsim ve tutar tablosundan içe aktarıldı",yuklenenIsim:adRaw,updatedAt:serverTimestamp()},{merge:true});basarili++;}
     msg.textContent=`İçe aktarma tamam: ${basarili} ödeme işlendi. Eşleşmeyen: ${eslesmeyen}. Hatalı tutar: ${tutarsiz}.`;
     if(eslesmeyenler.length)console.warn("Eşleşmeyen ödeme satırları:",eslesmeyenler);
-    await adminListele();
+    await adminListele(false);
   }catch(e){console.error(e);msg.textContent="İçe aktarma sırasında hata oluştu. Excel/CSV dosyasını kontrol et.";alert("Dosya okunamadı. Personel / Tutar başlıklarını kontrol et.");}
 };
 
